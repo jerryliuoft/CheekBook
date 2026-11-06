@@ -1,9 +1,9 @@
 import { PHOTO_MAX_SIDE, THUMB_MAX_SIDE } from '../config';
 import { db, logTiming, requestPersistence, type Face, type Photo } from '../db';
 import { groupFaces } from '../lib/cluster';
-import { isImageFile, normalizeImage } from '../lib/image';
+import { isImageFile } from '../lib/image';
 import { getSettings } from '../settings';
-import { faceWorker } from '../workers/clients';
+import { faceWorker, imageWorkers } from '../workers/clients';
 
 export interface ImportProgress {
   phase: 'copying' | 'loading-models' | 'finding-faces' | 'grouping' | 'done';
@@ -19,31 +19,41 @@ export async function addFiles(files: File[], onProgress: OnProgress): Promise<n
   await requestPersistence();
   const images = files.filter(isImageFile);
   let added = 0;
-  for (let i = 0; i < images.length; i++) {
-    const f = images[i];
-    const sourceKey = `${f.webkitRelativePath || f.name}|${f.size}|${f.lastModified}`;
-    onProgress({ phase: 'copying', done: i, total: images.length, message: f.name });
-    if (await db.photos.where('sourceKey').equals(sourceKey).count()) continue;
-    try {
-      const t0 = performance.now();
-      const main = await normalizeImage(f, PHOTO_MAX_SIDE);
-      const thumb = await normalizeImage(main.blob, THUMB_MAX_SIDE, 0.8);
-      await db.photos.add({
-        name: f.webkitRelativePath || f.name,
-        sourceKey,
-        width: main.width,
-        height: main.height,
-        blob: main.blob,
-        thumb: thumb.blob,
-        status: 'pending',
-        addedAt: Date.now(),
-      } as Photo);
-      await logTiming('copy photo', performance.now() - t0);
-      added++;
-    } catch (e) {
-      console.warn('Could not read', f.name, e);
+  let done = 0;
+  let next = 0;
+  onProgress({ phase: 'copying', done: 0, total: images.length });
+
+  // Each worker in the pool pulls the next file until none are left.
+  async function drain(worker: ReturnType<typeof imageWorkers>[number]) {
+    while (next < images.length) {
+      const f = images[next++];
+      const name = f.webkitRelativePath || f.name;
+      const sourceKey = `${name}|${f.size}|${f.lastModified}`;
+      try {
+        if (await db.photos.where('sourceKey').equals(sourceKey).count()) continue;
+        const t0 = performance.now();
+        const img = await worker.normalize(f, PHOTO_MAX_SIDE, THUMB_MAX_SIDE);
+        await db.photos.add({
+          name,
+          sourceKey,
+          width: img.width,
+          height: img.height,
+          blob: img.blob,
+          thumb: img.thumb,
+          status: 'pending',
+          addedAt: Date.now(),
+        } as Photo);
+        await logTiming('copy photo', performance.now() - t0);
+        added++;
+      } catch (e) {
+        console.warn('Could not read', name, e);
+      } finally {
+        onProgress({ phase: 'copying', done: ++done, total: images.length, message: name });
+      }
     }
   }
+
+  await Promise.all(imageWorkers().map(drain));
   return added;
 }
 

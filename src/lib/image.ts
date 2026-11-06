@@ -1,21 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Box } from '../db';
 
-/** Decodes an image file (EXIF orientation applied) and returns a downscaled JPEG. */
-export async function normalizeImage(file: Blob, maxSide: number, quality = 0.9) {
-  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
-  const width = Math.round(bmp.width * scale);
-  const height = Math.round(bmp.height * scale);
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext('2d')!;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bmp, 0, 0, width, height);
-  bmp.close();
-  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
-  return { blob, width, height };
-}
-
 /** Cuts a rectangle out of an image; areas outside the image stay transparent. */
 export async function cropImage(src: Blob, rect: Box): Promise<{ blob: Blob; width: number; height: number }> {
   const bmp = await createImageBitmap(src);

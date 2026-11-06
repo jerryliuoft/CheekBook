@@ -1,9 +1,22 @@
 import * as Comlink from 'comlink';
 import { getSettings, updateSettings } from '../settings';
 import type { FaceApi } from './face.worker';
+import type { ImageApi } from './image.worker';
 import type { SegApi } from './seg.worker';
 
 let face: Comlink.Remote<FaceApi> | null = null;
+let images: Comlink.Remote<ImageApi>[] = [];
+
+/** A small pool of photo-resizing workers; decoding big photos is CPU-bound. */
+export function imageWorkers(): Comlink.Remote<ImageApi>[] {
+  if (!images.length) {
+    const n = Math.max(1, Math.min(3, Math.floor((navigator.hardwareConcurrency || 2) / 2)));
+    images = Array.from({ length: n }, () =>
+      Comlink.wrap<ImageApi>(new Worker(new URL('./image.worker.ts', import.meta.url), { type: 'module' })),
+    );
+  }
+  return images;
+}
 let seg: { remote: Comlink.Remote<SegApi>; worker: Worker; gpu: boolean } | null = null;
 
 export function faceWorker(): Comlink.Remote<FaceApi> {

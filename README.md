@@ -20,7 +20,7 @@ Open http://localhost:5173. The first time you make stickers, the browser also d
 
 | Step | What happens | Model / library |
 |---|---|---|
-| 1 · Photos | Each photo is copied into the browser (IndexedDB), EXIF-rotated and downscaled to 2048 px | Canvas, Dexie |
+| 1 · Photos | Each photo is copied into the browser (IndexedDB), EXIF-rotated and downscaled to 2048 px, in a pool of Web Workers | OffscreenCanvas, Dexie |
 | | Faces are found and fingerprinted (in a Web Worker) | SCRFD-10G + ArcFace R50 (InsightFace `buffalo_l`) via onnxruntime-web, WebGPU with wasm fallback |
 | 2 · People | Faces are grouped by cosine similarity; you merge groups and remove wrong faces | `src/lib/cluster.ts` |
 | 3 · Stickers | Body pose decides which crops are offered (face / upper / full) and whether they're big enough | MediaPipe Pose Landmarker |
@@ -35,6 +35,7 @@ The **Lab** tab has thresholds, model choices, and a timing table for every step
 src/
   config.ts             model ids and default thresholds (swap models here)
   db.ts                 IndexedDB schema (photos, faces, people, stickers, timings)
+  workers/image.worker.ts  photo decode + resize + thumbnail (off the main thread)
   workers/face.worker.ts   SCRFD detection + ArcFace embeddings (onnxruntime-web)
   workers/seg.worker.ts    matting + segmentation (Transformers.js)
   pipeline/             import → detect → group; crop → cut out → sticker → place
@@ -46,6 +47,7 @@ scripts/fetch-models.mjs  downloads model weights into public/models
 ## Notes and known limits
 
 - **GPU cut-outs are opt-in.** On the dev machine the GPU returned broken masks for MODNet and couldn't run BiRefNet at all (too few storage buffers per shader). Cut-outs therefore default to the CPU, which takes about 1 s per sticker with MODNet.
+- **Encode images in workers.** Chrome delays `convertToBlob`/`toBlob` JPEG encoding on the main thread until it's idle (about 1 s per call); in a worker it takes 50–80 ms. Photo import does its resizing in `image.worker.ts` for this reason.
 - **SAM is off by default.** In testing it removed parts of the body and didn't separate a baby from the parent holding them. Face stickers use a soft head-shaped trim instead.
 - **Upper/full-body stickers of a baby being held** will include the parent.
 - **Baby face grouping** is imperfect (models are trained on adults); use Merge and "Not this person".
