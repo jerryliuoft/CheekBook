@@ -67,7 +67,7 @@ async function detect(bmp: ImageBitmap, scoreThreshold: number) {
   const scale = Math.min(DET_SIZE / bmp.width, DET_SIZE / bmp.height);
   const canvas = new OffscreenCanvas(DET_SIZE, DET_SIZE);
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = '#000'; // theme-ok: model input, not UI
   ctx.fillRect(0, 0, DET_SIZE, DET_SIZE);
   ctx.drawImage(bmp, 0, 0, Math.round(bmp.width * scale), Math.round(bmp.height * scale));
   const pixels = ctx.getImageData(0, 0, DET_SIZE, DET_SIZE).data;
@@ -124,7 +124,7 @@ async function faceThumb(bmp: ImageBitmap, box: Box): Promise<Blob> {
   const cy = (box[1] + box[3]) / 2;
   const canvas = new OffscreenCanvas(160, 160);
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#eee';
+  ctx.fillStyle = '#eee'; // theme-ok: padding behind face thumbnails
   ctx.fillRect(0, 0, 160, 160);
   ctx.drawImage(bmp, cx - size / 2, cy - size / 2, size, size, 0, 0, 160, 160);
   return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });

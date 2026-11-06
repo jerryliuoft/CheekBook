@@ -6,15 +6,15 @@ import { FACE_MODELS } from '../config';
 import type { Box, Expression, Face, Looking } from '../db';
 import { visionFiles } from './mediapipe';
 
-export const EXPRESSIONS: Record<Expression, { emoji: string; label: string }> = {
-  laughing: { emoji: '😆', label: 'Laughing' },
-  smiling: { emoji: '😄', label: 'Smiling' },
-  surprised: { emoji: '😮', label: 'Surprised' },
-  ooh: { emoji: '😗', label: 'Ooh' },
-  sleepy: { emoji: '😴', label: 'Eyes closed' },
-  crying: { emoji: '😭', label: 'Crying' },
-  upset: { emoji: '😟', label: 'Upset' },
-  calm: { emoji: '😐', label: 'Calm' },
+export const EXPRESSIONS: Record<Expression, string> = {
+  laughing: 'Laughing',
+  smiling: 'Smiling',
+  surprised: 'Surprised',
+  ooh: 'Ooh',
+  sleepy: 'Eyes closed',
+  crying: 'Crying',
+  upset: 'Upset',
+  calm: 'Calm',
 };
 
 export const LOOKING: Record<Looking, string> = {
@@ -105,7 +105,7 @@ export async function readFaces(photo: Blob, boxes: Box[]) {
       // Square crop around the face with some margin, so the mesh model finds it.
       const side = Math.max(b[2] - b[0], b[3] - b[1]) * 1.8;
       const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = '#000'; // theme-ok: model input, not UI
       ctx.fillRect(0, 0, READ_SIDE, READ_SIDE);
       ctx.drawImage(bmp, cx - side / 2, cy - side / 2, side, side, 0, 0, READ_SIDE, READ_SIDE);
       const res = lm.detect(canvas);

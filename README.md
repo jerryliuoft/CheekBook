@@ -44,8 +44,15 @@ src/
   pipeline/             import → detect → group; crop → cut out → sticker → place
   lib/                  geometry, clustering, crop rules, masks, sticker effect, pose, expression, util helpers
   components/           one view per tab
+  styles/theme.css      the design system: every colour, font, corner, line and shadow
+  index.css             app styles, built only from theme tokens
 scripts/fetch-models.mjs  downloads model weights into public/models
+scripts/check-theme.mjs   part of `npm run lint`: fails on colours written outside theme.css
 ```
+
+## Look and feel
+
+The theme is "Oat & Espresso": oat and cream surfaces, espresso text and buttons, camel and sage accents, Cormorant Garamond for headings and Jost for text, thin lines and small corners. It is light only. To change the look, edit the tokens in `src/styles/theme.css`. New UI uses `var(--color-…)` and friends, and canvas code reads tokens with `token()` from `src/lib/theme.ts`. A line that truly needs a raw colour (for example a model's input canvas) can opt out with a `theme-ok` comment.
 
 ## Notes and known limits
 

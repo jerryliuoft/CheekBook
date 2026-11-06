@@ -145,7 +145,7 @@ export function StickersView({
               const n = count((f) => f.expression, m);
               return n ? (
                 <button key={m} className={`chip small ${moods.has(m) ? 'on' : ''}`} onClick={() => setMoods(toggled(moods, m))}>
-                  {EXPRESSIONS[m].emoji} {EXPRESSIONS[m].label} ({n})
+                  {EXPRESSIONS[m]} · {n}
                 </button>
               ) : null;
             })}
@@ -155,7 +155,7 @@ export function StickersView({
               const n = count((f) => f.looking, l);
               return n ? (
                 <button key={l} className={`chip small ${looks.has(l) ? 'on' : ''}`} onClick={() => setLooks(toggled(looks, l))}>
-                  {LOOKING[l]} ({n})
+                  {LOOKING[l]} · {n}
                 </button>
               ) : null;
             })}
@@ -177,14 +177,7 @@ export function StickersView({
           {visible.map((f) => (
             <div key={f.id} className="crop-row">
               <BlobImg blob={photos?.get(f.photoId)?.thumb} className="crop-photo" />
-              <div className="crop-face-wrap">
-                <BlobImg blob={f.thumb} className="crop-face" />
-                {f.expression && (
-                  <span className="mood" title={`${EXPRESSIONS[f.expression].label} · ${LOOKING[f.looking!]}`}>
-                    {EXPRESSIONS[f.expression].emoji}
-                  </span>
-                )}
-              </div>
+              <BlobImg blob={f.thumb} className="crop-face" />
               <div className="crop-options">
                 {KINDS.map((kind) => {
                   const c = f.crops?.find((c) => c.kind === kind);
@@ -205,6 +198,13 @@ export function StickersView({
                   );
                 })}
               </div>
+              {f.expression && (
+                <span className="crop-tag">
+                  {EXPRESSIONS[f.expression].toLowerCase()}
+                  <br />
+                  {LOOKING[f.looking!].toLowerCase()}
+                </span>
+              )}
             </div>
           ))}
         </div>

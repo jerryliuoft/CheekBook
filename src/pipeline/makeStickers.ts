@@ -4,6 +4,7 @@ import { db, logTiming, type Box, type CropKind, type Face, type Sticker } from 
 import { computeCrops, hasCurrentCrops } from '../lib/crops';
 import { expressionFields, hasCurrentExpression, readFaces } from '../lib/expression';
 import { detectPoses, type Pose } from '../lib/pose';
+import { token } from '../lib/theme';
 import { groupBy } from '../lib/util';
 import { getSettings } from '../settings';
 import { cutoutWorker, imageWorkers } from '../workers/clients';
@@ -103,6 +104,7 @@ export interface StickerJob {
 export async function makeStickers(jobs: StickerJob[], onProgress: (done: number, total: number, msg: string) => void) {
   const progress = Comlink.proxy((msg: string) => onProgress(0, jobs.length, msg));
   const canvas = imageWorkers()[0];
+  const colors = { edge: token('--sticker-edge'), shadow: token('--sticker-shadow') };
 
   onProgress(0, jobs.length, 'Loading cut-out model…');
   const t0 = performance.now();
@@ -123,7 +125,7 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
       // Face stickers are shaped to the head, so neighbours and clutter drop away.
       const cut = await cutoutWorker().cutout(cropped.blob, faceBox, job.kind === 'face', progress);
       const t2 = performance.now();
-      const st = await canvas.sticker(cropped.blob, Comlink.transfer(cut.alpha, [cut.alpha.buffer]), cut.width, cut.height);
+      const st = await canvas.sticker(cropped.blob, Comlink.transfer(cut.alpha, [cut.alpha.buffer]), cut.width, cut.height, colors);
       const t3 = performance.now();
       await logTiming('matting', cut.ms.matte, `${cut.width}x${cut.height}`);
       if (job.kind === 'face') await logTiming('face parsing', cut.ms.parse);

@@ -3,12 +3,10 @@ import type Konva from 'konva';
 import { useEffect, useRef, useState } from 'react';
 import { Image as KImage, Layer, Rect, Stage, Transformer } from 'react-konva';
 import { db, type Sticker } from '../db';
+import { tapeColors, token } from '../lib/theme';
 import { PAGE_H, PAGE_W, reshufflePage } from '../pipeline/makeStickers';
 import { Empty } from './common';
 import { useImageBitmap } from './hooks';
-
-// Washi-tape colours used for the little tape strips on each sticker.
-const TAPES = ['#f7c6d0', '#bfe3d9', '#fbe3a6', '#cdd8f6', '#f9d3b4'];
 
 export function ScrapbookView() {
   const pages = useLiveQuery(async () => {
@@ -97,7 +95,8 @@ function StickerNode({ sticker, selected, onSelect }: { sticker: Sticker; select
   const img = useImageBitmap(sticker.blob);
   const node = useRef<Konva.Image>(null);
   const tr = useRef<Konva.Transformer>(null);
-  const tape = TAPES[sticker.id % TAPES.length];
+  const tapes = tapeColors();
+  const tape = tapes[sticker.id % tapes.length];
 
   useEffect(() => {
     if (selected && tr.current && node.current) {
@@ -166,8 +165,9 @@ function StickerNode({ sticker, selected, onSelect }: { sticker: Sticker; select
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           rotateAnchorOffset={30}
           anchorSize={14}
-          borderStroke="#e58aa6"
-          anchorStroke="#e58aa6"
+          borderStroke={token('--color-selection')}
+          anchorStroke={token('--color-selection')}
+          anchorFill={token('--color-surface')}
         />
       )}
     </>

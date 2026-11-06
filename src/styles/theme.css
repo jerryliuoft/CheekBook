@@ -1,0 +1,86 @@
+/*
+ * CheekBook theme: "Oat & Espresso".
+ *
+ * The one place colours, fonts, corner sizes, lines and shadows are defined.
+ * Everything else uses the semantic tokens below (never the raw palette, never
+ * a hex value): `npm run lint` fails on colours written anywhere else.
+ * Canvas code (scrapbook, stickers) reads them with token() from src/lib/theme.ts.
+ *
+ * Light only, on purpose: the album should always look like paper.
+ */
+:root {
+  /* Raw palette: only referenced inside this file. */
+  --oat-50: #fbf8f3;
+  --oat-100: #f5efe6;
+  --oat-200: #ece3d5;
+  --oat-300: #e3d8c8;
+  --oat-400: #d3c5b1;
+  --taupe-500: #7a6c5f;
+  --umber-500: #8a6e52;
+  --espresso-800: #3b2f28;
+  --espresso-900: #2b2420;
+  --cream: #f7f2ea;
+  --paper: #fbf7ef;
+  --camel: #c4a27a;
+  --sage: #a7ab8f;
+  --olive-600: #56653f;
+  --brick-600: #9c3d2a;
+  --white: #fffdf9;
+
+  /* Surfaces */
+  --color-bg: var(--oat-100); /* page background */
+  --color-surface: var(--oat-50); /* panels, inputs, buttons */
+  --color-tint: var(--oat-200); /* selected rows, progress track, quiet fills */
+  --color-line: var(--oat-300); /* hairlines and borders */
+  --color-line-strong: var(--oat-400); /* hover borders */
+
+  /* Text (all pass 4.5:1 on bg and surface) */
+  --color-text: var(--espresso-900);
+  --color-text-muted: var(--taupe-500);
+  --color-text-flourish: var(--umber-500); /* large serif only: logo, page titles */
+
+  /* Actions */
+  --color-primary: var(--espresso-800); /* primary buttons, picked chips, active tab */
+  --color-on-primary: var(--cream);
+  --color-focus: var(--camel);
+
+  /* Accents and status */
+  --color-accent: var(--camel);
+  --color-accent-2: var(--sage);
+  --color-ok: var(--olive-600);
+  --color-error: var(--brick-600);
+
+  /* Scrapbook */
+  --color-paper: var(--paper);
+  --color-page-frame: var(--oat-300);
+  --color-selection: var(--camel);
+  --tape-1: #d9c7ad;
+  --tape-2: #c9cbb7;
+  --tape-3: #e3d3c6;
+  --tape-4: #cfc3b3;
+  --sticker-edge: var(--white); /* die-cut border of new stickers */
+  --sticker-shadow: rgba(59, 47, 40, 0.26);
+
+  /* Type */
+  --font-serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Jost', 'Segoe UI', system-ui, sans-serif;
+  --text-xs: 11.5px;
+  --text-sm: 13.5px;
+  --text-md: 15.5px;
+  --text-lg: 20px;
+  --text-title: 30px;
+  --text-logo: 34px;
+  --tracking-caps: 0.12em; /* small-capital labels: tabs, primary buttons, kickers */
+
+  /* Shape */
+  --line: 1px;
+  --radius-sm: 4px; /* buttons, inputs, tabs */
+  --radius-md: 8px; /* panels, cards, photos */
+  --radius-pill: 999px; /* chips only */
+
+  /* Depth */
+  --shadow-panel: 0 1px 2px rgba(43, 36, 32, 0.04), 0 10px 30px rgba(59, 47, 40, 0.06);
+  --shadow-page: 0 1px 1px rgba(43, 36, 32, 0.06), 0 14px 36px rgba(59, 47, 40, 0.14);
+
+  color-scheme: light;
+}

@@ -1,9 +1,15 @@
 // Turns a cut-out (image + alpha) into a die-cut sticker:
-// trimmed, thick white border, soft drop shadow, a little extra colour.
+// trimmed, thick border, soft drop shadow, a little extra colour.
 
 const MAX_SIDE = 768;
 
-export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: number) {
+/** Colours from the theme (read on the main thread; workers can't see CSS). */
+export interface StickerColors {
+  edge: string;
+  shadow: string;
+}
+
+export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: number, colors: StickerColors) {
   // 1. Cut-out with alpha applied, slightly warmer and brighter.
   const bmp = await createImageBitmap(crop);
   const base = new OffscreenCanvas(w, h);
@@ -41,12 +47,12 @@ export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: n
   cctx.imageSmoothingQuality = 'high';
   cctx.drawImage(base, x1, y1, tw, th, pad, pad, cw, ch);
 
-  // 3. White silhouette, stamped in a ring to grow it into a rounded border.
+  // 3. Silhouette in the edge colour, stamped in a ring to grow it into a rounded border.
   const sil = new OffscreenCanvas(W, H);
   const sctx = sil.getContext('2d')!;
   sctx.drawImage(cut, 0, 0);
   sctx.globalCompositeOperation = 'source-in';
-  sctx.fillStyle = '#ffffff';
+  sctx.fillStyle = colors.edge;
   sctx.fillRect(0, 0, W, H);
 
   const outline = new OffscreenCanvas(W, H);
@@ -70,7 +76,7 @@ export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: n
   // 4. Compose: shadowed border, then the photo on top.
   const out = new OffscreenCanvas(W, H);
   const ctx = out.getContext('2d')!;
-  ctx.shadowColor = 'rgba(70, 45, 30, 0.28)';
+  ctx.shadowColor = colors.shadow;
   ctx.shadowBlur = shadow;
   ctx.shadowOffsetY = Math.round(shadow * 0.35);
   ctx.drawImage(outline, 0, 0);

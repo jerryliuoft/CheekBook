@@ -33,9 +33,7 @@ const api = {
     return { blob: main.blob, thumb: thumb.blob, width: w, height: h };
   },
   crop: cropImage,
-  async sticker(crop: Blob, alpha: Uint8Array, w: number, h: number) {
-    return makeSticker(crop, alpha, w, h);
-  },
+  sticker: makeSticker,
 };
 
 export type ImageApi = typeof api;
