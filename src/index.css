@@ -106,6 +106,7 @@ select {
 }
 .stats b { display: block; font: 500 30px / 1 var(--font-serif); letter-spacing: 0; color: var(--color-text); }
 .stats .error, .stats .error b { color: var(--color-error); }
+.storage { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 18px; padding-top: 14px; border-top: var(--line) solid var(--color-line); }
 
 /* People */
 .sticky-actions { position: sticky; top: 0; background: var(--color-surface); z-index: 2; padding: 6px 0; }

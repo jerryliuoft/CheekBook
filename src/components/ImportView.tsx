@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db } from '../db';
+import { formatBytes, removeUnusedModels, storageReport, type StorageReport } from '../lib/storage';
 import { addFiles, processPending, type ImportProgress } from '../pipeline/importPhotos';
 import { Progress } from './common';
 
@@ -93,6 +94,45 @@ export function ImportView({ onDone }: { onDone: () => void }) {
         </div>
       )}
       <p className="muted small">JPEG, PNG, WebP and AVIF are supported. iPhone HEIC photos aren't yet.</p>
+      <StorageRow refreshKey={stats?.photos} />
     </section>
+  );
+}
+
+/** How much space the app uses in this browser, with a clean-up for old model files. */
+function StorageRow({ refreshKey }: { refreshKey?: number }) {
+  const [report, setReport] = useState<StorageReport | null>(null);
+  const [cleaning, setCleaning] = useState(false);
+  const [freed, setFreed] = useState<number | null>(null);
+
+  useEffect(() => {
+    storageReport().then(setReport, () => setReport(null));
+  }, [refreshKey, freed]);
+
+  if (!report) return null;
+
+  async function clean() {
+    setCleaning(true);
+    try {
+      setFreed(await removeUnusedModels());
+    } finally {
+      setCleaning(false);
+    }
+  }
+
+  return (
+    <div className="storage">
+      <span className="muted small">
+        Stored in this browser: {formatBytes(report.data)} of photos and stickers, {formatBytes(report.models)} of AI
+        models.
+      </span>
+      {report.unused > 0 ? (
+        <button className="small" disabled={cleaning} onClick={clean}>
+          {cleaning ? 'Cleaning…' : `Remove old model files (${formatBytes(report.unused)})`}
+        </button>
+      ) : (
+        freed != null && <span className="ok small">Freed {formatBytes(freed)}.</span>
+      )}
+    </div>
   );
 }
