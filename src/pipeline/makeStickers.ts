@@ -1,13 +1,11 @@
 import * as Comlink from 'comlink';
 import { db, logTiming, type Box, type CropKind, type CropOption, type Face, type Sticker } from '../db';
 import { computeCrops } from '../lib/crops';
-import { cropImage } from '../lib/image';
 import { trimToHead } from '../lib/mask';
 import { detectPoses } from '../lib/pose';
-import { makeSticker } from '../lib/sticker';
 import { getSettings } from '../settings';
 import type { MatterKey } from '../config';
-import { fallBackToCpu, segWorker } from '../workers/clients';
+import { fallBackToCpu, imageWorkers, segWorker } from '../workers/clients';
 import type { CutoutRequest } from '../workers/seg.worker';
 
 export const PAGE_W = 1000;
@@ -41,8 +39,17 @@ export async function ensureCrops(faces: Face[], onEach?: () => void) {
   }
 }
 
-function toLocal(b: Box, origin: Box): Box {
-  return [b[0] - origin[0], b[1] - origin[1], b[2] - origin[0], b[3] - origin[1]];
+/** Cut-outs work on crops no bigger than this; stickers are at most 768 px anyway. */
+const CROP_MAX_SIDE = 1024;
+
+/** Maps a box in photo pixels into a (scaled) crop's pixels. */
+function toLocal(b: Box, origin: Box, scale: number): Box {
+  return [
+    (b[0] - origin[0]) * scale,
+    (b[1] - origin[1]) * scale,
+    (b[2] - origin[0]) * scale,
+    (b[3] - origin[1]) * scale,
+  ];
 }
 
 /** Picks a spot on the page that overlaps existing stickers as little as possible. */
@@ -120,17 +127,23 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
     if (!face || !photo || !crop?.available || face.personId == null) continue;
     try {
       const t1 = performance.now();
-      const cropped = await cropImage(photo.blob, crop.rect);
+      const cropped = await imageWorkers()[0].crop(photo.blob, crop.rect, CROP_MAX_SIDE);
+      const faceBox = toLocal(face.box, crop.rect, cropped.scale);
       const res = await cutout({
         image: cropped.blob,
-        faceBox: toLocal(face.box, crop.rect),
-        bodyBox: toLocal(crop.bodyBox ?? crop.rect, crop.rect),
+        faceBox,
+        bodyBox: toLocal(crop.bodyBox ?? crop.rect, crop.rect, cropped.scale),
         segmenter: settings.segmenter,
       });
       // Face stickers get a soft head-shaped trim so neighbours and clutter drop away.
-      if (job.kind === 'face') trimToHead(res.alpha, res.width, res.height, toLocal(face.box, crop.rect));
+      if (job.kind === 'face') trimToHead(res.alpha, res.width, res.height, faceBox);
       const t2 = performance.now();
-      const st = await makeSticker(cropped.blob, res.alpha, res.width, res.height);
+      const st = await imageWorkers()[0].sticker(
+        cropped.blob,
+        Comlink.transfer(res.alpha, [res.alpha.buffer]),
+        res.width,
+        res.height,
+      );
       const t3 = performance.now();
       await logTiming('matting', res.ms.matte, `${res.device} ${matterFor()}, ${res.width}x${res.height}`);
       if (res.usedSegmenter) await logTiming('segment person', res.ms.segment, `${settings.segmenter}, ${res.device}`);

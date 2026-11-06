@@ -1,9 +1,11 @@
 import * as Comlink from 'comlink';
+import { cropImage } from '../lib/image';
+import { makeSticker } from '../lib/sticker';
 
 /**
- * Photo resizing runs here rather than on the page: Chrome defers JPEG encoding
- * on the main thread until it is idle (about 1 s per call), while in a worker
- * the same encode takes 50–80 ms.
+ * Canvas work (photo resizing, sticker drawing) runs here rather than on the
+ * page: Chrome defers main-thread image encoding until it is idle (about 1 s
+ * per JPEG), while in a worker the same encode takes 50–80 ms.
  */
 
 async function encode(src: CanvasImageSource, width: number, height: number, quality: number) {
@@ -29,6 +31,10 @@ const api = {
     const [tw, th] = fit(w, h, thumbSide);
     const thumb = await encode(main.canvas, tw, th, 0.8);
     return { blob: main.blob, thumb: thumb.blob, width: w, height: h };
+  },
+  crop: cropImage,
+  async sticker(crop: Blob, alpha: Uint8Array, w: number, h: number) {
+    return makeSticker(crop, alpha, w, h);
   },
 };
 
