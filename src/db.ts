@@ -24,6 +24,9 @@ export interface CropOption {
   reason?: string;
 }
 
+export type Expression = 'laughing' | 'smiling' | 'surprised' | 'ooh' | 'sleepy' | 'crying' | 'upset' | 'calm';
+export type Looking = 'camera' | 'left' | 'right' | 'up' | 'down'; // as seen in the photo
+
 export interface Face {
   id: number;
   photoId: number;
@@ -36,6 +39,9 @@ export interface Face {
   locked: boolean; // user placed it manually; regrouping leaves it alone
   crops?: CropOption[];
   cropsVersion?: number; // crops are recomputed when the crop rules change
+  expression?: Expression; // empty if the face couldn't be read
+  looking?: Looking;
+  expressionVersion?: number; // faces are read again when the rules change
 }
 
 export interface Person {

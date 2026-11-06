@@ -59,7 +59,18 @@ if (!existsSync(pose)) {
   console.log('Pose model already present');
 }
 
-// 3. MediaPipe wasm runtime, copied from node_modules so nothing loads from a CDN.
+// 3. MediaPipe face landmarker (Apache-2.0): expression and looking direction.
+const faceMesh = join(modelsDir, 'face_landmarker.task');
+if (!existsSync(faceMesh)) {
+  await download(
+    'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+    faceMesh,
+  );
+} else {
+  console.log('Face landmarker already present');
+}
+
+// 4. MediaPipe wasm runtime, copied from node_modules so nothing loads from a CDN.
 cpSync(join(root, 'node_modules', '@mediapipe', 'tasks-vision', 'wasm'), join(root, 'public', 'mediapipe'), {
   recursive: true,
 });

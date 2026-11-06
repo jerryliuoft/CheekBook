@@ -2,6 +2,7 @@ import * as Comlink from 'comlink';
 import { CROP_MAX_SIDE } from '../config';
 import { db, logTiming, type Box, type CropKind, type Face, type Sticker } from '../db';
 import { computeCrops, hasCurrentCrops } from '../lib/crops';
+import { expressionFields, hasCurrentExpression, readFaces } from '../lib/expression';
 import { detectPoses, type Pose } from '../lib/pose';
 import { groupBy } from '../lib/util';
 import { getSettings } from '../settings';
@@ -10,25 +11,46 @@ import { cutoutWorker, imageWorkers } from '../workers/clients';
 export const PAGE_W = 1000;
 export const PAGE_H = 1400;
 
-/** Computes (and caches on the face) which crops are possible for each face. */
-export async function ensureCrops(faces: Face[], onEach?: () => void) {
-  const byPhoto = groupBy(
-    faces.filter((f) => !hasCurrentCrops(f)),
-    (f) => f.photoId,
-  );
+export const needsAnalysis = (f: Face) => !hasCurrentCrops(f) || !hasCurrentExpression(f);
+
+/**
+ * Works out, and caches on each face, which crops are possible (pose model, once
+ * per photo) and the face's expression and looking direction.
+ */
+export async function analyzeFaces(faces: Face[], onEach?: () => void) {
+  const byPhoto = groupBy(faces.filter(needsAnalysis), (f) => f.photoId);
   for (const [photoId, list] of byPhoto) {
     const photo = await db.photos.get(photoId);
     if (!photo) continue;
-    const t0 = performance.now();
-    let poses: Pose[] = [];
-    try {
-      poses = await detectPoses(photo.blob);
-    } catch (e) {
-      console.warn('Pose detection failed', e);
+    const updates = new Map<number, Partial<Face>>(list.map((f) => [f.id, {}]));
+
+    const forCrops = list.filter((f) => !hasCurrentCrops(f));
+    if (forCrops.length) {
+      const t0 = performance.now();
+      let poses: Pose[] = [];
+      try {
+        poses = await detectPoses(photo.blob);
+      } catch (e) {
+        console.warn('Pose detection failed', e);
+      }
+      await logTiming('detect pose', performance.now() - t0, `${poses.length} pose(s)`);
+      for (const f of forCrops) Object.assign(updates.get(f.id)!, computeCrops(f.box, photo.width, photo.height, poses));
     }
-    await logTiming('detect pose', performance.now() - t0, `${poses.length} pose(s)`);
-    for (const f of list) {
-      await db.faces.update(f.id, computeCrops(f.box, photo.width, photo.height, poses));
+
+    const forExpr = list.filter((f) => !hasCurrentExpression(f));
+    if (forExpr.length) {
+      const t0 = performance.now();
+      try {
+        const read = await readFaces(photo.blob, forExpr.map((f) => f.box));
+        forExpr.forEach((f, i) => Object.assign(updates.get(f.id)!, expressionFields(read[i])));
+        await logTiming('read expression (per face)', (performance.now() - t0) / forExpr.length);
+      } catch (e) {
+        console.warn('Reading expressions failed', e);
+      }
+    }
+
+    for (const [id, u] of updates) {
+      await db.faces.update(id, u);
       onEach?.();
     }
   }

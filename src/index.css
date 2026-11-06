@@ -127,6 +127,11 @@ select { background: var(--panel); border: 1.5px solid var(--line); border-radiu
 .chip { border-radius: 999px; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
 .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .chip .why { font-size: 11px; opacity: 0.8; }
+.chip.small { padding: 4px 10px; font-size: 13px; }
+.filters { display: grid; gap: 6px; margin: 0 0 12px; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.crop-face-wrap { position: relative; flex: none; }
+.mood { position: absolute; right: -6px; bottom: -4px; font-size: 20px; line-height: 1; cursor: default; }
 
 /* Scrapbook */
 .book-nav .page-num { font: 24px var(--hand); }

@@ -1,5 +1,6 @@
-import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
+import { PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { FACE_MODELS } from '../config';
+import { visionFiles } from './mediapipe';
 
 /** One person's 33 landmarks in image pixels; v is visibility (0..1). */
 export type Pose = { x: number; y: number; v: number }[];
@@ -9,7 +10,7 @@ let landmarker: Promise<PoseLandmarker> | null = null;
 function get(): Promise<PoseLandmarker> {
   if (!landmarker) {
     landmarker = (async () => {
-      const vision = await FilesetResolver.forVisionTasks(FACE_MODELS.mediapipeWasm);
+      const vision = await visionFiles();
       const opts = (delegate: 'GPU' | 'CPU') => ({
         baseOptions: { modelAssetPath: FACE_MODELS.pose, delegate },
         runningMode: 'IMAGE' as const,

@@ -10,7 +10,7 @@ Requires Node 20+ and a Chromium browser (Chrome or Edge) on a desktop or laptop
 
 ```bash
 npm install
-npm run models   # downloads face + pose models (~200 MB) into public/models
+npm run models   # downloads face, pose and face-mesh models (~200 MB) into public/models
 npm run dev
 ```
 
@@ -24,6 +24,7 @@ Open http://localhost:5173. The first time you make stickers, the browser also d
 | | Faces are found and fingerprinted (in a Web Worker) | SCRFD-10G + ArcFace R50 (InsightFace `buffalo_l`) via onnxruntime-web, WebGPU with wasm fallback |
 | 2 · People | Faces are grouped by cosine similarity; you merge groups and remove wrong faces | `src/lib/cluster.ts` |
 | 3 · Stickers | Body pose decides which crops are offered (face / upper / full) and whether they're big enough | MediaPipe Pose Landmarker |
+| | Each face is tagged with an expression (laughing, smiling, surprised, ooh, eyes closed, crying, upset, calm) and where it looks (camera, left, right, up, down); filters narrow the list | MediaPipe Face Landmarker blendshapes + rules in `src/lib/expression.ts` |
 | | The person is cut out on a crop of at most 1024 px; face stickers are shaped to the head by face parsing (hair, ears and chin in; neck, clothes, hands and background out) | MODNet + SegFormer face parsing via Transformers.js (CPU) |
 | | The cut-out becomes a sticker (white border, shadow) | OffscreenCanvas in a Web Worker |
 | 4 · Scrapbook | Stickers are scattered on pages; drag, rotate and resize them | react-konva |
@@ -41,7 +42,7 @@ src/
   workers/cutout.worker.ts MODNet matting + face parsing (Transformers.js, CPU)
   workers/clients.ts       one lazily created instance of each worker
   pipeline/             import → detect → group; crop → cut out → sticker → place
-  lib/                  geometry, clustering, crop rules, masks, sticker effect, pose, util helpers
+  lib/                  geometry, clustering, crop rules, masks, sticker effect, pose, expression, util helpers
   components/           one view per tab
 scripts/fetch-models.mjs  downloads model weights into public/models
 ```
@@ -55,4 +56,5 @@ scripts/fetch-models.mjs  downloads model weights into public/models
 - **Upper/full-body stickers of a baby being held** will include the parent.
 - **Baby face grouping** is imperfect (models are trained on adults); use Merge and "Not this person".
 - **iPhone HEIC photos** aren't supported yet.
+- **Expressions** come from a face-mesh model trained on adults. On 29 baby faces the labels were right on 27 (one big grin read as calm, one faint smile as calm). Crying and upset aren't tested yet: no photos of them. Left and right are as seen in the photo; smiling adults often read as looking down because their eyes squint.
 - **Licences:** the InsightFace `buffalo_l` weights and the face-parsing model (trained on CelebAMask-HQ) are for non-commercial use only. MODNet (Apache-2.0), MediaPipe (Apache-2.0).

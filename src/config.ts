@@ -14,6 +14,7 @@ export const FACE_MODELS = {
   detector: '/models/det_10g.onnx', // SCRFD-10G (InsightFace buffalo_l)
   recognizer: '/models/w600k_r50.onnx', // ArcFace R50 (InsightFace buffalo_l)
   pose: '/models/pose_landmarker_full.task', // MediaPipe
+  faceMesh: '/models/face_landmarker.task', // MediaPipe: expression and looking direction
   mediapipeWasm: '/mediapipe',
 };
 

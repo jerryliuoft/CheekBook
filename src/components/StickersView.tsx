@@ -1,14 +1,16 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
-import { db, type CropKind } from '../db';
+import { db, type CropKind, type Expression, type Looking } from '../db';
 import { hasCurrentCrops } from '../lib/crops';
+import { EXPRESSIONS, LOOKING } from '../lib/expression';
 import { toggled } from '../lib/util';
-import { ensureCrops, makeStickers, type StickerJob } from '../pipeline/makeStickers';
+import { analyzeFaces, makeStickers, needsAnalysis, type StickerJob } from '../pipeline/makeStickers';
 import { BlobImg, Empty, Progress } from './common';
 
 const KIND_LABEL: Record<CropKind, string> = { face: 'Face', upper: 'Upper body', full: 'Full body' };
 const KINDS: CropKind[] = ['face', 'upper', 'full'];
 const key = (faceId: number, kind: CropKind) => `${faceId}:${kind}`;
+const faceOf = (k: string) => Number(k.split(':')[0]);
 
 export function StickersView({
   personId,
@@ -50,14 +52,16 @@ export function StickersView({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [analyzing, setAnalyzing] = useState<{ done: number; total: number } | null>(null);
   const [making, setMaking] = useState<{ done: number; total: number; msg: string } | null>(null);
+  const [moods, setMoods] = useState<Set<Expression>>(new Set());
+  const [looks, setLooks] = useState<Set<Looking>>(new Set());
 
-  // Work out which crops each face supports (runs the pose model once per photo).
-  const missing = useMemo(() => (faces ?? []).filter((f) => !hasCurrentCrops(f)), [faces]);
+  // Work out which crops each face supports and read its expression (once per face).
+  const missing = useMemo(() => (faces ?? []).filter(needsAnalysis), [faces]);
   useEffect(() => {
     if (!missing.length || analyzing) return;
     let done = 0;
     setAnalyzing({ done, total: missing.length });
-    ensureCrops(missing, () => setAnalyzing({ done: ++done, total: missing.length })).finally(() =>
+    analyzeFaces(missing, () => setAnalyzing({ done: ++done, total: missing.length })).finally(() =>
       setAnalyzing(null),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,11 +83,21 @@ export function StickersView({
     });
   }, [faces, made, personId, defaultsFor]);
 
+  const sorted = [...(faces ?? [])].sort((a, b) => b.box[2] - b.box[0] - (a.box[2] - a.box[0]));
+  const visible = sorted.filter(
+    (f) =>
+      (!moods.size || (f.expression && moods.has(f.expression))) && (!looks.size || (f.looking && looks.has(f.looking))),
+  );
+  // Only what's on screen gets made, so a filter never makes hidden stickers.
+  const visibleIds = new Set(visible.map((f) => f.id));
+  const toMake = [...picked].filter((k) => visibleIds.has(faceOf(k)));
+  const count = <T,>(get: (f: (typeof sorted)[number]) => T | undefined, v: T) => sorted.filter((f) => get(f) === v).length;
+
   if (!people) return null;
   if (!people.length) return <Empty>No people yet. Bring in some photos first.</Empty>;
 
   async function run() {
-    const jobs: StickerJob[] = [...picked].map((k) => {
+    const jobs: StickerJob[] = toMake.map((k) => {
       const [faceId, kind] = k.split(':');
       return { faceId: Number(faceId), kind: kind as CropKind };
     });
@@ -93,8 +107,6 @@ export function StickersView({
     setMaking(null);
     onDone();
   }
-
-  const sorted = [...(faces ?? [])].sort((a, b) => b.box[2] - b.box[0] - (a.box[2] - a.box[0]));
 
   return (
     <section className="panel">
@@ -106,6 +118,8 @@ export function StickersView({
             value={personId ?? ''}
             onChange={(e) => {
               setPicked(new Set());
+              setMoods(new Set());
+              setLooks(new Set());
               onPersonChange(Number(e.target.value));
             }}
           >
@@ -120,24 +134,57 @@ export function StickersView({
           </select>
         </label>
         <span className="spacer" />
-        <button className="primary" disabled={!picked.size || !!making} onClick={run}>
-          Make {picked.size} sticker{picked.size === 1 ? '' : 's'}
+        <button className="primary" disabled={!toMake.length || !!making} onClick={run}>
+          Make {toMake.length} sticker{toMake.length === 1 ? '' : 's'}
         </button>
       </div>
+      {personId != null && sorted.length > 0 && (
+        <div className="filters">
+          <div className="filter-row">
+            {(Object.keys(EXPRESSIONS) as Expression[]).map((m) => {
+              const n = count((f) => f.expression, m);
+              return n ? (
+                <button key={m} className={`chip small ${moods.has(m) ? 'on' : ''}`} onClick={() => setMoods(toggled(moods, m))}>
+                  {EXPRESSIONS[m].emoji} {EXPRESSIONS[m].label} ({n})
+                </button>
+              ) : null;
+            })}
+          </div>
+          <div className="filter-row">
+            {(Object.keys(LOOKING) as Looking[]).map((l) => {
+              const n = count((f) => f.looking, l);
+              return n ? (
+                <button key={l} className={`chip small ${looks.has(l) ? 'on' : ''}`} onClick={() => setLooks(toggled(looks, l))}>
+                  {LOOKING[l]} ({n})
+                </button>
+              ) : null;
+            })}
+          </div>
+        </div>
+      )}
       <p className="muted small">
         Bigger crops are only offered when the person is large enough in the photo to make a sharp sticker.
       </p>
-      {analyzing && <Progress done={analyzing.done} total={analyzing.total} label="Checking body poses…" />}
+      {analyzing && <Progress done={analyzing.done} total={analyzing.total} label="Reading faces and body poses…" />}
       {making && <Progress done={making.done} total={making.total} label={making.msg} />}
 
       {personId == null ? (
         <Empty>Pick a person above.</Empty>
+      ) : !visible.length && sorted.length ? (
+        <Empty>No faces match these filters.</Empty>
       ) : (
         <div className="crop-list">
-          {sorted.map((f) => (
+          {visible.map((f) => (
             <div key={f.id} className="crop-row">
               <BlobImg blob={photos?.get(f.photoId)?.thumb} className="crop-photo" />
-              <BlobImg blob={f.thumb} className="crop-face" />
+              <div className="crop-face-wrap">
+                <BlobImg blob={f.thumb} className="crop-face" />
+                {f.expression && (
+                  <span className="mood" title={`${EXPRESSIONS[f.expression].label} · ${LOOKING[f.looking!]}`}>
+                    {EXPRESSIONS[f.expression].emoji}
+                  </span>
+                )}
+              </div>
               <div className="crop-options">
                 {KINDS.map((kind) => {
                   const c = f.crops?.find((c) => c.kind === kind);
