@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
 import { db, type CropKind } from '../db';
+import { hasCurrentCrops } from '../lib/crops';
 import { toggled } from '../lib/util';
 import { ensureCrops, makeStickers, type StickerJob } from '../pipeline/makeStickers';
 import { BlobImg, Empty, Progress } from './common';
@@ -51,7 +52,7 @@ export function StickersView({
   const [making, setMaking] = useState<{ done: number; total: number; msg: string } | null>(null);
 
   // Work out which crops each face supports (runs the pose model once per photo).
-  const missing = useMemo(() => (faces ?? []).filter((f) => !f.crops), [faces]);
+  const missing = useMemo(() => (faces ?? []).filter((f) => !hasCurrentCrops(f)), [faces]);
   useEffect(() => {
     if (!missing.length || analyzing) return;
     let done = 0;
@@ -66,7 +67,7 @@ export function StickersView({
   const [defaultsFor, setDefaultsFor] = useState<number | null>(null);
   useEffect(() => {
     if (!faces || !made || personId == null || defaultsFor === personId) return;
-    if (faces.some((f) => f.personId !== personId || !f.crops)) return; // wait for this person's crops
+    if (faces.some((f) => f.personId !== personId || !hasCurrentCrops(f))) return; // wait for this person's crops
     setDefaultsFor(personId);
     setPicked(() => {
       const next = new Set<string>();

@@ -1,8 +1,7 @@
 import * as Comlink from 'comlink';
 import { CROP_MAX_SIDE } from '../config';
 import { db, logTiming, type Box, type CropKind, type Face, type Sticker } from '../db';
-import { computeCrops } from '../lib/crops';
-import { trimToHead } from '../lib/mask';
+import { computeCrops, hasCurrentCrops } from '../lib/crops';
 import { detectPoses, type Pose } from '../lib/pose';
 import { groupBy } from '../lib/util';
 import { getSettings } from '../settings';
@@ -14,7 +13,7 @@ export const PAGE_H = 1400;
 /** Computes (and caches on the face) which crops are possible for each face. */
 export async function ensureCrops(faces: Face[], onEach?: () => void) {
   const byPhoto = groupBy(
-    faces.filter((f) => !f.crops),
+    faces.filter((f) => !hasCurrentCrops(f)),
     (f) => f.photoId,
   );
   for (const [photoId, list] of byPhoto) {
@@ -29,7 +28,7 @@ export async function ensureCrops(faces: Face[], onEach?: () => void) {
     }
     await logTiming('detect pose', performance.now() - t0, `${poses.length} pose(s)`);
     for (const f of list) {
-      await db.faces.update(f.id, { crops: computeCrops(f.box, photo.width, photo.height, poses) });
+      await db.faces.update(f.id, computeCrops(f.box, photo.width, photo.height, poses));
       onEach?.();
     }
   }
@@ -85,7 +84,7 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
 
   onProgress(0, jobs.length, 'Loading cut-out model…');
   const t0 = performance.now();
-  await cutoutWorker().preload(progress);
+  await cutoutWorker().preload(jobs.some((j) => j.kind === 'face'), progress);
   await logTiming('load cut-out model', performance.now() - t0);
 
   for (let i = 0; i < jobs.length; i++) {
@@ -99,13 +98,13 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
       const t1 = performance.now();
       const cropped = await canvas.crop(photo.blob, crop.rect, CROP_MAX_SIDE);
       const faceBox = toLocal(face.box, crop.rect, cropped.scale);
-      const cut = await cutoutWorker().cutout(cropped.blob, faceBox);
-      // Face stickers get a soft head-shaped trim so neighbours and clutter drop away.
-      if (job.kind === 'face') trimToHead(cut.alpha, cut.width, cut.height, faceBox);
+      // Face stickers are shaped to the head, so neighbours and clutter drop away.
+      const cut = await cutoutWorker().cutout(cropped.blob, faceBox, job.kind === 'face', progress);
       const t2 = performance.now();
       const st = await canvas.sticker(cropped.blob, Comlink.transfer(cut.alpha, [cut.alpha.buffer]), cut.width, cut.height);
       const t3 = performance.now();
-      await logTiming('matting', cut.ms, `${cut.width}x${cut.height}`);
+      await logTiming('matting', cut.ms.matte, `${cut.width}x${cut.height}`);
+      if (job.kind === 'face') await logTiming('face parsing', cut.ms.parse);
       await logTiming('sticker effect', t3 - t2);
       await logTiming('sticker total', t3 - t1, job.kind);
 

@@ -4,6 +4,11 @@
 // from the Hugging Face Hub on first use. GPU cut-outs and SAM were tried and
 // dropped: see "Notes and known limits" in the README.
 export const CUTOUT_MODEL = 'Xenova/modnet';
+// Face parsing (SegFormer, CelebAMask-HQ classes) shapes face stickers to the
+// real head: hair, ears and chin in; towels, hands and backgrounds out. 256 px
+// input looks as good as 512 px at a quarter of the time.
+export const PARSER_MODEL = 'jonathandinu/face-parsing';
+export const PARSE_SIZE = 256;
 
 export const FACE_MODELS = {
   detector: '/models/det_10g.onnx', // SCRFD-10G (InsightFace buffalo_l)

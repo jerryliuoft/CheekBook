@@ -1,4 +1,4 @@
-import type { Box, CropKind, CropOption } from '../db';
+import type { Box, CropKind, CropOption, Face } from '../db';
 import { boxArea, clampBox, unionBox } from './geometry';
 import type { Pose } from './pose';
 
@@ -6,6 +6,13 @@ import type { Pose } from './pose';
 const NOSE = 0, L_SHOULDER = 11, R_SHOULDER = 12, L_HIP = 23, R_HIP = 24;
 const L_KNEE = 25, R_KNEE = 26, L_ANKLE = 27, R_ANKLE = 28;
 const VISIBLE = 0.5;
+
+// Bump when the crop rules change, so cached crops are recomputed.
+const CROPS_VERSION = 2;
+
+export function hasCurrentCrops(f: Face): boolean {
+  return !!f.crops && f.cropsVersion === CROPS_VERSION;
+}
 
 // Smallest crop side (stored-photo pixels) that still makes a sharp sticker.
 const MIN_SIDE: Record<CropKind, number> = { face: 96, upper: 220, full: 300 };
@@ -45,16 +52,17 @@ function option(kind: CropKind, rect: Box, w: number, h: number, missing?: strin
 }
 
 /** Works out face / upper-body / full-body crops for one face. */
-export function computeCrops(face: Box, w: number, h: number, poses: Pose[]): CropOption[] {
+export function computeCrops(face: Box, w: number, h: number, poses: Pose[]): Pick<Face, 'crops' | 'cropsVersion'> {
   const fw = face[2] - face[0], fh = face[3] - face[1];
   const cx = (face[0] + face[2]) / 2;
   const pose = matchPose(face, poses);
   const vis = (i: number) => !!pose && pose[i].v >= VISIBLE;
   const pt = (i: number): Box => [pose![i].x, pose![i].y, pose![i].x, pose![i].y];
 
-  // Face: square around the face, shifted up for hair, generous so ears/cheeks fit.
-  const fs = Math.max(fw, fh) * 1.9;
-  const fcy = (face[1] + face[3]) / 2 - fh * 0.08;
+  // Face: square around the face, shifted up and roomy enough for hair, ears and
+  // hats (a baby's head is large next to its face). Face parsing trims it later.
+  const fs = Math.max(fw, fh) * 2.2;
+  const fcy = (face[1] + face[3]) / 2 - fh * 0.12;
   const faceRect: Box = [cx - fs / 2, fcy - fs / 2, cx + fs / 2, fcy + fs / 2];
   const crops: CropOption[] = [option('face', faceRect, w, h)];
 
@@ -80,5 +88,5 @@ export function computeCrops(face: Box, w: number, h: number, poses: Pose[]): Cr
   } else {
     crops.push(option('full', faceRect, w, h, 'Legs not visible'));
   }
-  return crops;
+  return { crops, cropsVersion: CROPS_VERSION };
 }

@@ -35,6 +35,7 @@ export interface Face {
   personId: number | null;
   locked: boolean; // user placed it manually; regrouping leaves it alone
   crops?: CropOption[];
+  cropsVersion?: number; // crops are recomputed when the crop rules change
 }
 
 export interface Person {
