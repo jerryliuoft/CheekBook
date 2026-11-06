@@ -24,10 +24,10 @@ Open http://localhost:5173. The first time you make stickers, the browser also d
 | | Faces are found and fingerprinted (in a Web Worker) | SCRFD-10G + ArcFace R50 (InsightFace `buffalo_l`) via onnxruntime-web, WebGPU with wasm fallback |
 | 2 · People | Faces are grouped by cosine similarity; you merge groups and remove wrong faces | `src/lib/cluster.ts` |
 | 3 · Stickers | Body pose decides which crops are offered (face / upper / full) and whether they're big enough | MediaPipe Pose Landmarker |
-| | The person is cut out, cleaned up, and turned into a sticker (white border, shadow) | MODNet (CPU) or BiRefNet (GPU) via Transformers.js; optional SAM 2.1 / SAM 3 |
+| | The person is cut out on a crop of at most 1024 px, cleaned up, and turned into a sticker (white border, shadow) | MODNet via Transformers.js (CPU), canvas work in a Web Worker |
 | 4 · Scrapbook | Stickers are scattered on pages; drag, rotate and resize them | react-konva |
 
-The **Lab** tab has thresholds, model choices, and a timing table for every step on your computer.
+The **Lab** tab has thresholds and a timing table for every step on your computer.
 
 ## Code map
 
@@ -37,19 +37,20 @@ src/
   db.ts                 IndexedDB schema (photos, faces, people, stickers, timings)
   workers/image.worker.ts  photo decode + resize + thumbnail (off the main thread)
   workers/face.worker.ts   SCRFD detection + ArcFace embeddings (onnxruntime-web)
-  workers/seg.worker.ts    matting + segmentation (Transformers.js)
+  workers/cutout.worker.ts MODNet person matting (Transformers.js, CPU)
+  workers/clients.ts       one lazily created instance of each worker
   pipeline/             import → detect → group; crop → cut out → sticker → place
-  lib/                  geometry, clustering, crop rules, masks, sticker effect, pose
+  lib/                  geometry, clustering, crop rules, masks, sticker effect, pose, util helpers
   components/           one view per tab
 scripts/fetch-models.mjs  downloads model weights into public/models
 ```
 
 ## Notes and known limits
 
-- **GPU cut-outs are opt-in.** On the dev machine the GPU returned broken masks for MODNet and couldn't run BiRefNet at all (too few storage buffers per shader). Cut-outs therefore default to the CPU, which takes about 1 s per sticker with MODNet.
+- **Cut-outs run on the CPU only.** On the dev machine WebGPU returned broken masks for MODNet with no error, and couldn't run BiRefNet at all (too few storage buffers per shader); BiRefNet on the CPU ran out of memory. MODNet on the CPU is clean and takes about 0.5 s per sticker. The GPU/BiRefNet path was removed; it is in git history (commit 8ed8eae and earlier) if needed.
 - **Encode images in workers.** Chrome delays `convertToBlob`/`toBlob` JPEG encoding on the main thread until it's idle (about 1 s per call); in a worker it takes 50–80 ms. Photo import does its resizing in `image.worker.ts` for this reason.
-- **SAM is off by default.** In testing it removed parts of the body and didn't separate a baby from the parent holding them. Face stickers use a soft head-shaped trim instead.
+- **SAM was tried and removed.** SAM 2.1 removed parts of the body and didn't separate a baby from the parent holding them. Face stickers use a soft head-shaped trim instead.
 - **Upper/full-body stickers of a baby being held** will include the parent.
 - **Baby face grouping** is imperfect (models are trained on adults); use Merge and "Not this person".
 - **iPhone HEIC photos** aren't supported yet.
-- **Licences:** the InsightFace `buffalo_l` weights are for non-commercial use only. MODNet (Apache-2.0), BiRefNet (MIT), MediaPipe (Apache-2.0).
+- **Licences:** the InsightFace `buffalo_l` weights are for non-commercial use only. MODNet (Apache-2.0), MediaPipe (Apache-2.0).

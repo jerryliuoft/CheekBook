@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import type { Box } from '../db';
 
 /**
@@ -26,19 +25,4 @@ export async function cropImage(
 
 export function isImageFile(f: File): boolean {
   return /^image\/(jpeg|png|webp|gif|bmp|avif)$/.test(f.type) || /\.(jpe?g|png|webp|avif)$/i.test(f.name);
-}
-
-/** Object URL for a blob, revoked when the blob changes or the component unmounts. */
-export function useObjectUrl(blob: Blob | undefined | null): string | undefined {
-  const [url, setUrl] = useState<string>();
-  useEffect(() => {
-    if (!blob) {
-      setUrl(undefined);
-      return;
-    }
-    const u = URL.createObjectURL(blob);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [blob]);
-  return url;
 }

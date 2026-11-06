@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
-import { db, type CropKind, type Face } from '../db';
+import { db, type CropKind } from '../db';
+import { toggled } from '../lib/util';
 import { ensureCrops, makeStickers, type StickerJob } from '../pipeline/makeStickers';
 import { BlobImg, Empty, Progress } from './common';
 
@@ -80,14 +81,6 @@ export function StickersView({
   if (!people) return null;
   if (!people.length) return <Empty>No people yet. Bring in some photos first.</Empty>;
 
-  function toggle(f: Face, kind: CropKind) {
-    const k = key(f.id, kind);
-    const next = new Set(picked);
-    if (next.has(k)) next.delete(k);
-    else next.add(k);
-    setPicked(next);
-  }
-
   async function run() {
     const jobs: StickerJob[] = [...picked].map((k) => {
       const [faceId, kind] = k.split(':');
@@ -155,7 +148,7 @@ export function StickersView({
                       className={`chip ${picked.has(k) ? 'on' : ''}`}
                       disabled={!c?.available || !!making}
                       title={c?.reason ?? ''}
-                      onClick={() => toggle(f, kind)}
+                      onClick={() => setPicked(toggled(picked, k))}
                     >
                       {KIND_LABEL[kind]}
                       {has ? ' ✓' : ''}

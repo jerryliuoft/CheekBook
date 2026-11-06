@@ -1,7 +1,6 @@
 import type { Box, CropKind, CropOption } from '../db';
 import { boxArea, clampBox, unionBox } from './geometry';
-
-type Pose = { x: number; y: number; v: number }[];
+import type { Pose } from './pose';
 
 // MediaPipe pose landmark indices
 const NOSE = 0, L_SHOULDER = 11, R_SHOULDER = 12, L_HIP = 23, R_HIP = 24;
@@ -9,7 +8,7 @@ const L_KNEE = 25, R_KNEE = 26, L_ANKLE = 27, R_ANKLE = 28;
 const VISIBLE = 0.5;
 
 // Smallest crop side (stored-photo pixels) that still makes a sharp sticker.
-export const MIN_SIDE: Record<CropKind, number> = { face: 96, upper: 220, full: 300 };
+const MIN_SIDE: Record<CropKind, number> = { face: 96, upper: 220, full: 300 };
 // How much of a crop may fall outside the photo before we stop offering it.
 const MAX_OUTSIDE = 0.25;
 
@@ -28,7 +27,7 @@ function matchPose(face: Box, poses: Pose[]): Pose | null {
   return null;
 }
 
-function option(kind: CropKind, rect: Box, w: number, h: number, bodyBox: Box, missing?: string, face?: Box): CropOption {
+function option(kind: CropKind, rect: Box, w: number, h: number, missing?: string, face?: Box): CropOption {
   const clipped = clampBox(rect, w, h);
   const cw = clipped[2] - clipped[0], ch = clipped[3] - clipped[1];
   let reason = missing;
@@ -42,7 +41,7 @@ function option(kind: CropKind, rect: Box, w: number, h: number, bodyBox: Box, m
     if (1 - inside > MAX_OUTSIDE) reason = 'Cut off by the photo edge';
   }
   if (!reason && Math.min(cw, ch) < MIN_SIDE[kind]) reason = `Too small (${Math.round(Math.min(cw, ch))}px)`;
-  return { kind, rect: clipped, available: !reason, reason, bodyBox: clampBox(bodyBox, w, h) };
+  return { kind, rect: clipped, available: !reason, reason };
 }
 
 /** Works out face / upper-body / full-body crops for one face. */
@@ -57,7 +56,7 @@ export function computeCrops(face: Box, w: number, h: number, poses: Pose[]): Cr
   const fs = Math.max(fw, fh) * 1.9;
   const fcy = (face[1] + face[3]) / 2 - fh * 0.08;
   const faceRect: Box = [cx - fs / 2, fcy - fs / 2, cx + fs / 2, fcy + fs / 2];
-  const crops: CropOption[] = [option('face', faceRect, w, h, faceRect)];
+  const crops: CropOption[] = [option('face', faceRect, w, h)];
 
   // Upper body: head to hips. Uses pose when we have shoulders, otherwise face proportions.
   let upper: Box;
@@ -71,15 +70,15 @@ export function computeCrops(face: Box, w: number, h: number, poses: Pose[]): Cr
   } else {
     upper = [cx - fw * 1.7, face[1] - fh * 0.45, cx + fw * 1.7, face[3] + fh * 2.4];
   }
-  crops.push(option('upper', upper, w, h, upper, undefined, face));
+  crops.push(option('upper', upper, w, h, undefined, face));
 
   // Full body: needs knees or ankles from the pose.
   if (pose && (vis(L_ANKLE) || vis(R_ANKLE) || vis(L_KNEE) || vis(R_KNEE))) {
     const pts = pose.filter((p) => p.v >= VISIBLE).map((p): Box => [p.x, p.y, p.x, p.y]);
     const full = expand(unionBox([expand(face, 0.25, 0.45), ...pts]), 0.12, 0.06);
-    crops.push(option('full', full, w, h, full));
+    crops.push(option('full', full, w, h));
   } else {
-    crops.push(option('full', faceRect, w, h, faceRect, 'Legs not visible'));
+    crops.push(option('full', faceRect, w, h, 'Legs not visible'));
   }
   return crops;
 }

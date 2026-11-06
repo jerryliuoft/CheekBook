@@ -1,6 +1,9 @@
 import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { FACE_MODELS } from '../config';
 
+/** One person's 33 landmarks in image pixels; v is visibility (0..1). */
+export type Pose = { x: number; y: number; v: number }[];
+
 let landmarker: Promise<PoseLandmarker> | null = null;
 
 function get(): Promise<PoseLandmarker> {
@@ -25,7 +28,7 @@ function get(): Promise<PoseLandmarker> {
 }
 
 /** Returns poses as landmark lists in pixel coordinates of the given image. */
-export async function detectPoses(blob: Blob): Promise<{ x: number; y: number; v: number }[][]> {
+export async function detectPoses(blob: Blob): Promise<Pose[]> {
   const lm = await get();
   const bmp = await createImageBitmap(blob);
   const res = lm.detect(bmp);

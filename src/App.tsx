@@ -4,6 +4,7 @@ import { LabView } from './components/LabView';
 import { PeopleView } from './components/PeopleView';
 import { ScrapbookView } from './components/ScrapbookView';
 import { StickersView } from './components/StickersView';
+import { readLocal, writeLocal } from './lib/util';
 
 type Tab = 'import' | 'people' | 'stickers' | 'book' | 'lab';
 
@@ -15,26 +16,15 @@ const TABS: [Tab, string][] = [
   ['lab', 'Lab'],
 ];
 
-function loadPerson(): number | null {
-  try {
-    const v = localStorage.getItem('cheekbook.person');
-    return v ? Number(v) : null;
-  } catch {
-    return null;
-  }
-}
+const PERSON_KEY = 'cheekbook.person';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('import');
-  const [personId, setPersonIdState] = useState<number | null>(loadPerson);
+  const [personId, setPersonIdState] = useState(() => readLocal<number | null>(PERSON_KEY, null));
 
   function setPersonId(id: number) {
     setPersonIdState(id);
-    try {
-      localStorage.setItem('cheekbook.person', String(id));
-    } catch {
-      /* ignore */
-    }
+    writeLocal(PERSON_KEY, id);
   }
 
   return (

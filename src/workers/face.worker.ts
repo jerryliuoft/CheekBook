@@ -4,6 +4,7 @@ import * as ort from 'onnxruntime-web/webgpu';
 import { FACE_MODELS } from '../config';
 import type { Box } from '../db';
 import { nms, similarityTransform } from '../lib/geometry';
+import { normalized } from '../lib/util';
 
 const DET_SIZE = 640;
 const STRIDES = [8, 16, 32];
@@ -114,12 +115,7 @@ async function embed(bmp: ImageBitmap, kps: number[]): Promise<Float32Array> {
   const pixels = ctx.getImageData(0, 0, 112, 112).data;
   const input = new ort.Tensor('float32', toCHW(pixels, 112, 112, 127.5, 127.5), [1, 3, 112, 112]);
   const out = await rec!.run({ [rec!.inputNames[0]]: input });
-  const v = Float32Array.from(out[rec!.outputNames[0]].data as Float32Array);
-  let norm = 0;
-  for (const x of v) norm += x * x;
-  norm = Math.sqrt(norm) || 1;
-  for (let i = 0; i < v.length; i++) v[i] /= norm;
-  return v;
+  return normalized(out[rec!.outputNames[0]].data as Float32Array);
 }
 
 async function faceThumb(bmp: ImageBitmap, box: Box): Promise<Blob> {

@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo, useState } from 'react';
 import { db, type Face, type Person } from '../db';
 import { mergePeople, regroupAll, splitFace } from '../lib/cluster';
+import { groupBy, toggled } from '../lib/util';
 import { useSettings } from '../settings';
 import { BlobImg, Empty } from './common';
 
@@ -14,13 +15,7 @@ export function PeopleView({ onPick }: { onPick: (personId: number) => void }) {
   const settings = useSettings();
   const data = useLiveQuery(async () => {
     const [people, faces] = await Promise.all([db.people.toArray(), db.faces.toArray()]);
-    const byPerson = new Map<number, Face[]>();
-    for (const f of faces) {
-      if (f.personId == null) continue;
-      const list = byPerson.get(f.personId) ?? [];
-      list.push(f);
-      byPerson.set(f.personId, list);
-    }
+    const byPerson = groupBy(faces, (f) => f.personId);
     return people
       .map((p) => ({ person: p, faces: byPerson.get(p.id) ?? [] }))
       .filter((r) => r.faces.length)
@@ -38,13 +33,6 @@ export function PeopleView({ onPick }: { onPick: (personId: number) => void }) {
 
   if (!data) return null;
   if (!data.length) return <Empty>No faces yet. Bring in some photos first.</Empty>;
-
-  function toggle(id: number) {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelected(next);
-  }
 
   async function merge() {
     const ids = [...selected];
@@ -66,7 +54,7 @@ export function PeopleView({ onPick }: { onPick: (personId: number) => void }) {
       row={r}
       selected={selected.has(r.person.id)}
       open={open === r.person.id}
-      onToggle={() => toggle(r.person.id)}
+      onToggle={() => setSelected(toggled(selected, r.person.id))}
       onOpen={() => setOpen(open === r.person.id ? null : r.person.id)}
       onPick={() => onPick(r.person.id)}
     />

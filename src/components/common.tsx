@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useObjectUrl } from '../lib/image';
+import { useObjectUrl } from './hooks';
 
 export function BlobImg({ blob, alt = '', className }: { blob?: Blob | null; alt?: string; className?: string }) {
   const url = useObjectUrl(blob);

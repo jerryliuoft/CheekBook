@@ -1,16 +1,10 @@
 import { db, type Face, type Person } from '../db';
+import { groupBy, normalized } from './util';
 
 function dot(a: Float32Array, b: Float32Array): number {
   let s = 0;
   for (let i = 0; i < a.length; i++) s += a[i] * b[i];
   return s;
-}
-
-function normalized(v: Float32Array): Float32Array {
-  let n = 0;
-  for (const x of v) n += x * x;
-  n = Math.sqrt(n) || 1;
-  return v.map((x) => x / n);
 }
 
 interface Group {
@@ -38,20 +32,11 @@ function addToGroup(g: Group, f: Face) {
  * new groups found in this pass) when cosine similarity >= threshold;
  * otherwise they start a new group. Similar new groups are then merged.
  */
-export async function groupFaces(threshold: number): Promise<{ newPeople: number; assigned: number }> {
-  const faces = await db.faces.toArray();
-  const byPerson = new Map<number, Face[]>();
-  const ungrouped: Face[] = [];
-  for (const f of faces) {
-    if (f.personId != null) {
-      const list = byPerson.get(f.personId) ?? [];
-      list.push(f);
-      byPerson.set(f.personId, list);
-    } else {
-      ungrouped.push(f);
-    }
-  }
-  if (ungrouped.length === 0) return { newPeople: 0, assigned: 0 };
+export async function groupFaces(threshold: number) {
+  const byPerson = groupBy(await db.faces.toArray(), (f) => f.personId);
+  const ungrouped = byPerson.get(null) ?? [];
+  byPerson.delete(null);
+  if (ungrouped.length === 0) return;
 
   const groups: Group[] = [...byPerson].map(([pid, fs]) => makeGroup(pid, fs));
   ungrouped.sort((a, b) => b.score - a.score);
@@ -77,7 +62,7 @@ export async function groupFaces(threshold: number): Promise<{ newPeople: number
       if (j === i) continue;
       if (dot(g.centroid, groups[j].centroid) >= threshold) {
         const target = groups[j];
-        for (const id of g.faceIds) target.faceIds.push(id);
+        target.faceIds.push(...g.faceIds);
         for (let k = 0; k < g.sum.length; k++) target.sum[k] += g.sum[k];
         target.centroid = normalized(target.sum);
         groups.splice(i, 1);
@@ -105,7 +90,6 @@ export async function groupFaces(threshold: number): Promise<{ newPeople: number
       await db.faces.where('id').anyOf(toAssign).modify({ personId: pid });
     }
   });
-  return { newPeople, assigned: ungrouped.length };
 }
 
 /** Clears automatic grouping (keeps faces the user placed by hand) and regroups. */
@@ -114,7 +98,7 @@ export async function regroupAll(threshold: number) {
     await db.faces.filter((f) => !f.locked).modify({ personId: null });
     await removeEmptyPeople();
   });
-  return groupFaces(threshold);
+  await groupFaces(threshold);
 }
 
 export async function removeEmptyPeople() {

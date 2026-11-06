@@ -3,9 +3,9 @@ import type Konva from 'konva';
 import { useEffect, useRef, useState } from 'react';
 import { Image as KImage, Layer, Rect, Stage, Transformer } from 'react-konva';
 import { db, type Sticker } from '../db';
-import { useObjectUrl } from '../lib/image';
 import { PAGE_H, PAGE_W, reshufflePage } from '../pipeline/makeStickers';
 import { Empty } from './common';
+import { useImageBitmap } from './hooks';
 
 // Washi-tape colours used for the little tape strips on each sticker.
 const TAPES = ['#f7c6d0', '#bfe3d9', '#fbe3a6', '#cdd8f6', '#f9d3b4'];
@@ -15,7 +15,9 @@ export function ScrapbookView() {
     const keys = (await db.stickers.orderBy('page').uniqueKeys()) as number[];
     return keys.filter((k) => k >= 0);
   });
-  const [page, setPage] = useState(0);
+  const [chosenPage, setPage] = useState(0);
+  // Fall back to the last page when the chosen one has emptied out.
+  const page = !pages?.length || pages.includes(chosenPage) ? chosenPage : pages[pages.length - 1];
   const stickers = useLiveQuery(() => db.stickers.where('page').equals(page).toArray(), [page]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -28,10 +30,6 @@ export function ScrapbookView() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (pages && pages.length && !pages.includes(page)) setPage(pages[pages.length - 1]);
-  }, [pages, page]);
 
   if (!pages) return null;
   if (!pages.length) return <Empty>No stickers yet. Make some in step 3.</Empty>;
@@ -78,7 +76,6 @@ export function ScrapbookView() {
             onTouchStart={(e) => e.target === e.target.getStage() && setSelectedId(null)}
           >
             <Layer>
-              <Rect width={PAGE_W} height={PAGE_H} listening={false} />
               {(stickers ?? []).map((s) => (
                 <StickerNode
                   key={s.id}
@@ -96,20 +93,8 @@ export function ScrapbookView() {
   );
 }
 
-function useImage(url?: string) {
-  const [img, setImg] = useState<HTMLImageElement>();
-  useEffect(() => {
-    if (!url) return;
-    const i = new window.Image();
-    i.onload = () => setImg(i);
-    i.src = url;
-  }, [url]);
-  return img;
-}
-
 function StickerNode({ sticker, selected, onSelect }: { sticker: Sticker; selected: boolean; onSelect: () => void }) {
-  const url = useObjectUrl(sticker.blob);
-  const img = useImage(url);
+  const img = useImageBitmap(sticker.blob);
   const node = useRef<Konva.Image>(null);
   const tr = useRef<Konva.Transformer>(null);
   const tape = TAPES[sticker.id % TAPES.length];

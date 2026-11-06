@@ -1,13 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState } from 'react';
-import { MATTERS, SEGMENTERS, type MatterChoice, type SegmenterKey } from '../config';
 import { db } from '../db';
 import { updateSettings, useSettings } from '../settings';
-import { segWorker } from '../workers/clients';
 
 export function LabView() {
   const s = useSettings();
-  const [gpu, setGpu] = useState<string>('checking…');
   const timings = useLiveQuery(async () => {
     const all = await db.timings.toArray();
     const by = new Map<string, { n: number; total: number; last: number; detail?: string }>();
@@ -22,12 +18,6 @@ export function LabView() {
     return [...by];
   });
 
-  useEffect(() => {
-    segWorker()
-      .device()
-      .then((d) => setGpu(d.device === 'webgpu' ? `WebGPU available (${d.gpuInfo})` : 'No WebGPU, using CPU (slower)'));
-  }, []);
-
   async function clearAll() {
     if (!confirm('Delete all photos, faces, people and stickers stored in this browser?')) return;
     await Promise.all([db.photos.clear(), db.faces.clear(), db.people.clear(), db.stickers.clear(), db.timings.clear()]);
@@ -37,7 +27,8 @@ export function LabView() {
     <section className="panel">
       <h2>Lab</h2>
       <p className="muted">
-        {gpu}. Cross-origin isolated: {String(self.crossOriginIsolated)} (needed for multi-threaded CPU inference).
+        Cross-origin isolated: {String(self.crossOriginIsolated)} (needed for multi-threaded CPU inference). The
+        "load face models" timing below shows whether face finding runs on the GPU (webgpu) or CPU (wasm).
       </p>
 
       <h3>Settings</h3>
@@ -63,26 +54,6 @@ export function LabView() {
           Stickers per page <b>{s.facesPerPage}</b>
           <input type="range" min={3} max={16} step={1} value={s.facesPerPage}
             onChange={(e) => updateSettings({ facesPerPage: Number(e.target.value) })} />
-        </label>
-        <label>
-          Cut-out runs on
-          <select value={s.cutoutDevice} onChange={(e) => updateSettings({ cutoutDevice: e.target.value as 'cpu' | 'gpu' })}>
-            <option value="cpu">CPU (reliable, recommended)</option>
-            <option value="gpu">GPU (experimental: some GPUs return broken masks)</option>
-          </select>
-        </label>
-        <label>
-          Person picker (segmentation)
-          <select value={s.segmenter} onChange={(e) => updateSettings({ segmenter: e.target.value as SegmenterKey })}>
-            {Object.entries(SEGMENTERS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
-        </label>
-        <label>
-          Edge cleanup (matting)
-          <select value={s.matter} onChange={(e) => updateSettings({ matter: e.target.value as MatterChoice })}>
-            <option value="auto">Automatic (MODNet on CPU, BiRefNet on GPU)</option>
-            {Object.entries(MATTERS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
         </label>
       </div>
 

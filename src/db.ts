@@ -22,7 +22,6 @@ export interface CropOption {
   rect: Box; // in stored-photo pixels
   available: boolean;
   reason?: string;
-  bodyBox?: Box; // person extent for the segmenter prompt
 }
 
 export interface Face {

@@ -1,5 +1,5 @@
-import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
 
 // Cross-origin isolation enables SharedArrayBuffer, which onnxruntime-web needs
 // for multi-threaded CPU inference. "credentialless" still lets us load models
@@ -7,7 +7,7 @@ import { defineConfig } from 'vite'
 const isolation = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'credentialless',
-}
+};
 
 export default defineConfig({
   plugins: [react()],
@@ -16,4 +16,4 @@ export default defineConfig({
   worker: { format: 'es' },
   // These ship their own wasm files; pre-bundling breaks the paths to them.
   optimizeDeps: { exclude: ['onnxruntime-web', '@huggingface/transformers'] },
-})
+});
