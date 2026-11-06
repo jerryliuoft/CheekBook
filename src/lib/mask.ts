@@ -175,16 +175,14 @@ export interface Guide {
 /**
  * Soft head mask (0..255, w*h) for a crop, from face parsing.
  *
- * The parser saw the crop rotated by -roll around the face centre (so the face
- * was upright); `face` is the detected face box, whose centre is the same in
- * both frames. Hair and hats
+ * The crop has been turned so the face is upright. Hair and hats
  * must stay near the face, since dark backgrounds are often labelled as hair.
  * The parse map is coarse (1/4 of 256 px), so the head probability is
  * upsampled smoothly and its edge is snapped to the photo with a guided filter.
  * The parser sometimes misses a baby's face (a scrunched-up cry, a second face
  * next to it), so the face found by detection is always kept.
  */
-export function headMask(p: ParseResult, w: number, h: number, face: Box, roll: number, guide: Guide): Uint8Array {
+export function headMask(p: ParseResult, w: number, h: number, face: Box, guide: Guide): Uint8Array {
   const { logits, classes, lw, lh } = p;
   const hairNear = ellipseWeight(face, 1.15, 1.2);
   const hatNear = ellipseWeight(face, 1.7, 1.7);
@@ -208,14 +206,10 @@ export function headMask(p: ParseResult, w: number, h: number, face: Box, roll: 
   }
   sctx.putImageData(img, 0, 0);
 
-  // Upscale smoothly and rotate back into the crop's frame in one draw.
+  // Upscale smoothly to the crop's size.
   const big = new OffscreenCanvas(w, h);
   const bctx = big.getContext('2d', { willReadFrequently: true })!;
   bctx.imageSmoothingQuality = 'high';
-  const cx = (face[0] + face[2]) / 2, cy = (face[1] + face[3]) / 2;
-  bctx.translate(cx, cy);
-  bctx.rotate(roll);
-  bctx.translate(-cx, -cy);
   bctx.drawImage(small, 0, 0, w, h);
   const d = bctx.getImageData(0, 0, w, h).data;
   const prob = new Float32Array(w * h);
@@ -238,13 +232,43 @@ export function headMask(p: ParseResult, w: number, h: number, face: Box, roll: 
       out[i] = Math.round(255 * Math.max(t * t * (3 - 2 * t), core(x, y)));
     }
   }
+  // A head outline is rounded: fill bites the parser took out of it.
+  const fill = closeShape(out, w, h, Math.round(Math.max(face[2] - face[0], face[3] - face[1]) * 0.15));
+  for (let i = 0; i < w * h; i++) out[i] = Math.max(out[i], fill[i]);
   return out;
+}
+
+/**
+ * Morphological closing with a round brush of radius r (blur, then threshold,
+ * twice): fills notches and bays narrower than about 2r, keeps the outline round.
+ */
+function closeShape(mask: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const pass = (src: Uint8Array, lo: number, hi: number) => {
+    const a = new OffscreenCanvas(w, h);
+    const actx = a.getContext('2d')!;
+    const img = actx.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) img.data[i * 4 + 3] = src[i];
+    actx.putImageData(img, 0, 0);
+    const b = new OffscreenCanvas(w, h);
+    const bctx = b.getContext('2d', { willReadFrequently: true })!;
+    bctx.filter = `blur(${r / 2}px)`;
+    bctx.drawImage(a, 0, 0);
+    const d = bctx.getImageData(0, 0, w, h).data;
+    const out = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      const t = Math.min(1, Math.max(0, (d[i * 4 + 3] - lo) / (hi - lo)));
+      out[i] = Math.round(255 * t * t * (3 - 2 * t));
+    }
+    return out;
+  };
+  // Grow (anything the blur reaches), then shrink back (only what stays solid).
+  return pass(pass(mask, 10, 60), 195, 245);
 }
 
 /** 1 inside the ellipse that fits the detected face box, fading out at its edge. */
 function faceCore(face: Box) {
   const cx = (face[0] + face[2]) / 2, cy = (face[1] + face[3]) / 2;
-  const rx = ((face[2] - face[0]) / 2) * 0.92, ry = ((face[3] - face[1]) / 2) * 0.95;
+  const rx = ((face[2] - face[0]) / 2) * 0.78, ry = ((face[3] - face[1]) / 2) * 0.78;
   return (x: number, y: number) => {
     const r = Math.hypot((x - cx) / rx, (y - cy) / ry);
     return r <= 0.85 ? 1 : r >= 1 ? 0 : (1 - r) / 0.15;

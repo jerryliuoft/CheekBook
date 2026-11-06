@@ -50,21 +50,32 @@ async function parseFace(img: RawImage): Promise<ParseResult> {
   return { logits: logits.data as Float32Array, classes, lw, lh };
 }
 
-// Below this tilt the parser copes fine; above it the face is turned upright first.
+// Below this tilt both models cope fine; above it the crop is turned upright first.
 const MAX_ROLL = (10 * Math.PI) / 180;
 
-/** The crop rotated by -roll around the face centre, so the face is upright. */
-async function uprighted(image: Blob, w: number, h: number, face: Box, roll: number) {
-  const bmp = await createImageBitmap(image);
+/** Draws src rotated by `angle` around the face centre (canvas pixels outside become clear). */
+function rotated(src: CanvasImageSource, w: number, h: number, face: Box, angle: number) {
   const canvas = new OffscreenCanvas(w, h);
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   const cx = (face[0] + face[2]) / 2, cy = (face[1] + face[3]) / 2;
   ctx.translate(cx, cy);
-  ctx.rotate(-roll);
+  ctx.rotate(angle);
   ctx.translate(-cx, -cy);
-  ctx.drawImage(bmp, 0, 0, w, h);
-  bmp.close();
-  return RawImage.fromCanvas(canvas);
+  ctx.drawImage(src, 0, 0, w, h);
+  return canvas;
+}
+
+/** Rotates a w*h alpha mask by `angle` around the face centre. */
+function rotateAlpha(alpha: Uint8Array, w: number, h: number, face: Box, angle: number): Uint8Array {
+  const src = new OffscreenCanvas(w, h);
+  const sctx = src.getContext('2d')!;
+  const img = sctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) img.data[i * 4 + 3] = alpha[i];
+  sctx.putImageData(img, 0, 0);
+  const d = rotated(src, w, h, face, angle).getContext('2d')!.getImageData(0, 0, w, h).data;
+  const out = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) out[i] = d[i * 4 + 3];
+  return out;
 }
 
 export interface CutoutResult {
@@ -83,12 +94,19 @@ const api = {
   /**
    * Soft alpha mask for the person whose face is at faceBox (crop pixels).
    * head: shape it to the head (face stickers). roll: the face's tilt in
-   * radians (eye line angle), so tilted faces can be parsed upright.
+   * radians (eye line angle).
+   *
+   * Both models were trained on upright portraits: on a baby lying down the
+   * matte cuts into the chin and cheeks and the parser loses the face. So a
+   * tilted face crop is turned upright, cut out, and the mask turned back.
    */
   async cutout(image: Blob, faceBox: Box, head: boolean, roll: number, onProgress?: Progress): Promise<CutoutResult> {
     const { model, processor } = await matter(onProgress);
-    const img = await RawImage.fromBlob(image);
-    const { width, height } = img;
+    const src = await createImageBitmap(image);
+    const { width, height } = src;
+    const turn = head && Math.abs(roll) > MAX_ROLL ? roll : 0;
+    const img = RawImage.fromCanvas(rotated(src, width, height, faceBox, -turn));
+    src.close();
     const t0 = performance.now();
     const { pixel_values } = await processor(img);
     const { output } = await model({ input: pixel_values });
@@ -98,10 +116,8 @@ const api = {
 
     if (head) {
       try {
-        // The parser only knows upright faces: straighten tilted ones first.
-        const turn = Math.abs(roll) > MAX_ROLL ? roll : 0;
-        const p = await parseFace(turn ? await uprighted(image, width, height, faceBox, turn) : img);
-        const mask = headMask(p, width, height, faceBox, turn, { data: img.data, channels: img.channels });
+        const p = await parseFace(img);
+        const mask = headMask(p, width, height, faceBox, { data: img.data, channels: img.channels });
         for (let i = 0; i < alpha.length; i++) alpha[i] = (alpha[i] * mask[i]) / 255;
       } catch (e) {
         console.warn('Face parsing failed; using an oval head trim', e);
@@ -109,6 +125,7 @@ const api = {
       }
     }
     const t2 = performance.now();
+    if (turn) alpha = rotateAlpha(alpha, width, height, faceBox, turn);
 
     // Last, keep only the blobs connected to the chosen face (drops other people and clutter).
     alpha = keepComponentsTouching(alpha, width, height, faceBox);
