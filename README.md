@@ -59,7 +59,7 @@ The theme is "Oat & Espresso": oat and cream surfaces, espresso text and buttons
 - **Cut-outs run on the CPU only.** On the dev machine WebGPU returned broken masks for MODNet with no error, and couldn't run BiRefNet at all (too few storage buffers per shader); BiRefNet on the CPU ran out of memory. MODNet on the CPU is clean and takes about 0.5 s per sticker. The GPU/BiRefNet path was removed; it is in git history (commit 8ed8eae and earlier) if needed.
 - **Encode images in workers.** Chrome delays `convertToBlob`/`toBlob` JPEG encoding on the main thread until it's idle (about 1 s per call); in a worker it takes 50–80 ms. Photo import does its resizing in `image.worker.ts` for this reason.
 - **SAM was tried and removed.** SAM 2.1 removed parts of the body and didn't separate a baby from the parent holding them. Face stickers use face parsing instead.
-- **Face parsing** adds about 0.6 s per face sticker (256 px input; 512 px looked no better and took 2.2 s). On photos with a black background, dark background next to the head can be kept as hair.
+- **Face parsing** adds about 0.6 s per face sticker (256 px input; 512 px looked no better and took 2.2 s). The parser only knows upright faces, so tilted heads (a baby lying down) are rotated upright by the eye line before parsing. Its 64 × 64 map is upsampled from soft scores and snapped to the photo's edges with a guided filter, so edges stay smooth. On photos with a black background, dark background next to the head can be kept as hair.
 - **Upper/full-body stickers of a baby being held** will include the parent.
 - **Baby face grouping** is imperfect (models are trained on adults); use Merge and "Not this person".
 - **iPhone HEIC photos** aren't supported yet.

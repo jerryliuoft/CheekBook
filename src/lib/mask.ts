@@ -73,11 +73,13 @@ export function keepComponentsTouching(alpha: Uint8Array, w: number, h: number, 
 }
 
 /**
- * Makes see-through gaps that are fully enclosed by the mask solid (e.g. a
- * patchy hood or a gap between hair and ear), so the sticker has no holes.
- * Edits alpha in place.
+ * Makes everything inside the sticker's outline fully opaque, leaving only a
+ * soft outer rim of `rim` px. Fills enclosed gaps (a patchy hood, a gap by the
+ * ear) together with their faded edges, which would otherwise let the white
+ * sticker border show through as thin lines. Edits alpha in place.
  */
-export function fillHoles(alpha: Uint8Array, w: number, h: number, threshold = 128) {
+export function solidify(alpha: Uint8Array, w: number, h: number, rim: number, threshold = 128) {
+  // 1. Everything not reachable from the border through clear pixels is inside.
   const outside = new Uint8Array(w * h);
   const stack: number[] = [];
   const seed = (i: number) => {
@@ -102,7 +104,28 @@ export function fillHoles(alpha: Uint8Array, w: number, h: number, threshold = 1
     if (i >= w) seed(i - w);
     if (i < w * (h - 1)) seed(i + w);
   }
-  for (let i = 0; i < w * h; i++) if (!outside[i] && alpha[i] < threshold) alpha[i] = 255;
+  // 2. Shrink the inside by the rim width (separable erosion), then make it solid.
+  const inside = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) inside[i] = outside[i] ? 0 : 1;
+  const core = erode(erode(inside, w, h, rim, 1, w), w, h, rim, w, 1);
+  for (let i = 0; i < w * h; i++) if (core[i]) alpha[i] = 255;
+}
+
+/** Binary erosion along one axis: step is the index distance between neighbours. */
+function erode(src: Uint8Array, w: number, h: number, r: number, step: number, lineStep: number) {
+  const out = new Uint8Array(w * h);
+  const lines = step === 1 ? h : w, len = step === 1 ? w : h;
+  const ones = new Int32Array(len + 1);
+  for (let l = 0; l < lines; l++) {
+    const base = l * lineStep;
+    for (let k = 0; k < len; k++) ones[k + 1] = ones[k] + src[base + k * step];
+    for (let k = 0; k < len; k++) {
+      const a = k - r, b = k + r;
+      if (a < 0 || b >= len) continue; // the window runs off the image: not inside
+      if (ones[b + 1] - ones[a] === 2 * r + 1) out[base + k * step] = 1;
+    }
+  }
+  return out;
 }
 
 /** 1 inside an ellipse around the face, fading to 0 between inner and 1 (radius fractions). */
@@ -134,41 +157,123 @@ export function trimToHead(alpha: Uint8Array, w: number, h: number, face: Box) {
 // Face-parsing classes (CelebAMask-HQ) that make up a head sticker: skin, nose,
 // glasses, eyes, brows, ears, mouth, lips, hair, hat, earrings. Neck, necklace
 // and clothes are left out, so the sticker ends under the chin.
-const HEAD_CLASSES = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+const HEAD_CLASSES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 const HAIR = 13, HAT = 14;
 
+export interface ParseResult {
+  logits: Float32Array; // [classes, lh, lw]
+  classes: number;
+  lw: number;
+  lh: number;
+}
+
+export interface Guide {
+  data: Uint8ClampedArray | Uint8Array; // the crop's pixels
+  channels: number;
+}
+
 /**
- * Soft head mask (0..255, w*h) from a face-parsing label map (lw*lh, covering
- * the same crop). Hair and hats must stay near the face: dark backgrounds are
- * often labelled as hair.
+ * Soft head mask (0..255, w*h) for a crop, from face parsing.
+ *
+ * The parser saw the crop rotated by -roll around the face centre (so the face
+ * was upright); `face` is the face box in that upright frame. Hair and hats
+ * must stay near the face, since dark backgrounds are often labelled as hair.
+ * The parse map is coarse (1/4 of 256 px), so the head probability is
+ * upsampled smoothly and its edge is snapped to the photo with a guided filter.
  */
-export function headMask(labels: Uint8Array, lw: number, lh: number, w: number, h: number, face: Box): Uint8Array {
+export function headMask(p: ParseResult, w: number, h: number, face: Box, roll: number, guide: Guide): Uint8Array {
+  const { logits, classes, lw, lh } = p;
   const hairNear = ellipseWeight(face, 1.15, 1.2);
   const hatNear = ellipseWeight(face, 1.7, 1.7);
+  const plane = lw * lh;
+  const sx = w / lw, sy = h / lh;
   const small = new OffscreenCanvas(lw, lh);
   const sctx = small.getContext('2d')!;
   const img = sctx.createImageData(lw, lh);
-  const sx = w / lw, sy = h / lh;
-  for (let i = 0; i < lw * lh; i++) {
-    const c = labels[i];
-    if (!HEAD_CLASSES.has(c)) continue;
+  for (let i = 0; i < plane; i++) {
+    let max = -Infinity;
+    for (let c = 0; c < classes; c++) max = Math.max(max, logits[c * plane + i]);
+    let sum = 0;
+    for (let c = 0; c < classes; c++) sum += Math.exp(logits[c * plane + i] - max);
     const x = ((i % lw) + 0.5) * sx, y = (((i / lw) | 0) + 0.5) * sy;
-    const wgt = c === HAIR ? hairNear(x, y) : c === HAT ? hatNear(x, y) : 1;
-    img.data[i * 4 + 3] = Math.round(255 * wgt);
+    let head = 0;
+    for (const c of HEAD_CLASSES) {
+      const pc = Math.exp(logits[c * plane + i] - max) / sum;
+      head += c === HAIR ? pc * hairNear(x, y) : c === HAT ? pc * hatNear(x, y) : pc;
+    }
+    img.data[i * 4 + 3] = Math.round(255 * Math.min(1, head));
   }
   sctx.putImageData(img, 0, 0);
 
-  // Upscale smoothly, then firm up the edge so it isn't blurry.
+  // Upscale smoothly and rotate back into the crop's frame in one draw.
   const big = new OffscreenCanvas(w, h);
-  const bctx = big.getContext('2d')!;
+  const bctx = big.getContext('2d', { willReadFrequently: true })!;
   bctx.imageSmoothingQuality = 'high';
-  bctx.filter = `blur(${Math.max(1, sx / 2)}px)`;
+  const cx = (face[0] + face[2]) / 2, cy = (face[1] + face[3]) / 2;
+  bctx.translate(cx, cy);
+  bctx.rotate(roll);
+  bctx.translate(-cx, -cy);
   bctx.drawImage(small, 0, 0, w, h);
   const d = bctx.getImageData(0, 0, w, h).data;
+  const prob = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) prob[i] = d[i * 4 + 3] / 255;
+
+  // Snap the edge to the photo's own edges (chin, hairline), then firm it up.
+  const gray = new Float32Array(w * h);
+  const ch = guide.channels;
+  for (let i = 0; i < w * h; i++) {
+    const j = i * ch;
+    gray[i] = (0.299 * guide.data[j] + 0.587 * guide.data[j + 1] + 0.114 * guide.data[j + 2]) / 255;
+  }
+  const snapped = guidedFilter(gray, prob, w, h, Math.max(4, Math.round(Math.max(w, h) / 90)), 2e-3);
   const out = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) {
-    const a = d[i * 4 + 3];
-    out[i] = a < 90 ? 0 : a > 165 ? 255 : Math.round(((a - 90) / 75) * 255);
+    const t = Math.min(1, Math.max(0, (snapped[i] - 0.4) / 0.2));
+    out[i] = Math.round(255 * t * t * (3 - 2 * t));
   }
   return out;
+}
+
+/** Box mean over a (2r+1)^2 window, clipped at the borders (integral image). */
+function boxMean(src: Float32Array, w: number, h: number, r: number): Float32Array {
+  const W = w + 1;
+  const sat = new Float64Array(W * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      row += src[y * w + x];
+      sat[(y + 1) * W + x + 1] = sat[y * W + x + 1] + row;
+    }
+  }
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const y1 = Math.max(0, y - r), y2 = Math.min(h, y + r + 1);
+    for (let x = 0; x < w; x++) {
+      const x1 = Math.max(0, x - r), x2 = Math.min(w, x + r + 1);
+      const s = sat[y2 * W + x2] - sat[y1 * W + x2] - sat[y2 * W + x1] + sat[y1 * W + x1];
+      out[y * w + x] = s / ((y2 - y1) * (x2 - x1));
+    }
+  }
+  return out;
+}
+
+/** Guided filter (He et al.): smooths p while following the edges of the guide I. */
+function guidedFilter(I: Float32Array, p: Float32Array, w: number, h: number, r: number, eps: number) {
+  const n = w * h;
+  const Ip = new Float32Array(n), II = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    Ip[i] = I[i] * p[i];
+    II[i] = I[i] * I[i];
+  }
+  const mI = boxMean(I, w, h, r), mP = boxMean(p, w, h, r);
+  const mIp = boxMean(Ip, w, h, r), mII = boxMean(II, w, h, r);
+  const a = new Float32Array(n), b = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    a[i] = (mIp[i] - mI[i] * mP[i]) / (mII[i] - mI[i] * mI[i] + eps);
+    b[i] = mP[i] - a[i] * mI[i];
+  }
+  const mA = boxMean(a, w, h, r), mB = boxMean(b, w, h, r);
+  const q = new Float32Array(n);
+  for (let i = 0; i < n; i++) q[i] = mA[i] * I[i] + mB[i];
+  return q;
 }

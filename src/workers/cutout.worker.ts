@@ -5,7 +5,7 @@ import * as Comlink from 'comlink';
 import { AutoModel, AutoProcessor, RawImage, env, type PreTrainedModel, type Processor } from '@huggingface/transformers';
 import { CUTOUT_MODEL, PARSE_SIZE, PARSER_MODEL } from '../config';
 import type { Box } from '../db';
-import { fillHoles, headMask, keepComponentsTouching, trimToHead } from '../lib/mask';
+import { headMask, keepComponentsTouching, solidify, trimToHead, type ParseResult } from '../lib/mask';
 
 env.allowLocalModels = false;
 
@@ -38,24 +38,33 @@ function load(id: string, dtype: 'fp32' | 'q8', label: string, onProgress?: Prog
 const matter = (onProgress?: Progress) => load(CUTOUT_MODEL, 'fp32', 'cut-out model', onProgress);
 const parser = (onProgress?: Progress) => load(PARSER_MODEL, 'q8', 'face-parsing model', onProgress);
 
-/** Per-pixel face-parsing class at PARSE_SIZE/4 resolution. */
-async function parseFace(img: RawImage) {
+/** Face-parsing class scores at PARSE_SIZE/4 resolution. */
+async function parseFace(img: RawImage): Promise<ParseResult> {
   const { model, processor } = await parser();
   (processor as unknown as { image_processor: { size: unknown } }).image_processor.size = {
     height: PARSE_SIZE,
     width: PARSE_SIZE,
   };
   const { logits } = await model(await processor(img)); // [1, classes, h, w]
-  const [, n, h, w] = logits.dims as number[];
-  const data = logits.data as Float32Array;
-  const plane = h * w;
-  const labels = new Uint8Array(plane);
-  for (let i = 0; i < plane; i++) {
-    let best = 0;
-    for (let c = 1; c < n; c++) if (data[c * plane + i] > data[best * plane + i]) best = c;
-    labels[i] = best;
-  }
-  return { labels, w, h };
+  const [, classes, lh, lw] = logits.dims as number[];
+  return { logits: logits.data as Float32Array, classes, lw, lh };
+}
+
+// Below this tilt the parser copes fine; above it the face is turned upright first.
+const MAX_ROLL = (10 * Math.PI) / 180;
+
+/** The crop rotated by -roll around the face centre, so the face is upright. */
+async function uprighted(image: Blob, w: number, h: number, face: Box, roll: number) {
+  const bmp = await createImageBitmap(image);
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext('2d')!;
+  const cx = (face[0] + face[2]) / 2, cy = (face[1] + face[3]) / 2;
+  ctx.translate(cx, cy);
+  ctx.rotate(-roll);
+  ctx.translate(-cx, -cy);
+  ctx.drawImage(bmp, 0, 0, w, h);
+  bmp.close();
+  return RawImage.fromCanvas(canvas);
 }
 
 export interface CutoutResult {
@@ -73,9 +82,10 @@ const api = {
 
   /**
    * Soft alpha mask for the person whose face is at faceBox (crop pixels).
-   * head: shape it to the head (face stickers).
+   * head: shape it to the head (face stickers). roll: the face's tilt in
+   * radians (eye line angle), so tilted faces can be parsed upright.
    */
-  async cutout(image: Blob, faceBox: Box, head: boolean, onProgress?: Progress): Promise<CutoutResult> {
+  async cutout(image: Blob, faceBox: Box, head: boolean, roll: number, onProgress?: Progress): Promise<CutoutResult> {
     const { model, processor } = await matter(onProgress);
     const img = await RawImage.fromBlob(image);
     const { width, height } = img;
@@ -88,8 +98,10 @@ const api = {
 
     if (head) {
       try {
-        const p = await parseFace(img);
-        const mask = headMask(p.labels, p.w, p.h, width, height, faceBox);
+        // The parser only knows upright faces: straighten tilted ones first.
+        const turn = Math.abs(roll) > MAX_ROLL ? roll : 0;
+        const p = await parseFace(turn ? await uprighted(image, width, height, faceBox, turn) : img);
+        const mask = headMask(p, width, height, faceBox, turn, { data: img.data, channels: img.channels });
         for (let i = 0; i < alpha.length; i++) alpha[i] = (alpha[i] * mask[i]) / 255;
       } catch (e) {
         console.warn('Face parsing failed; using an oval head trim', e);
@@ -100,8 +112,9 @@ const api = {
 
     // Last, keep only the blobs connected to the chosen face (drops other people and clutter).
     alpha = keepComponentsTouching(alpha, width, height, faceBox);
-    // A head has no see-through gaps; a body can (between an arm and the side).
-    if (head) fillHoles(alpha, width, height);
+    // A head has no see-through gaps (a body can, between an arm and the side):
+    // make it solid inside, so the sticker's white border can't show through.
+    if (head) solidify(alpha, width, height, Math.max(3, Math.round(Math.max(width, height) / 160)));
     return Comlink.transfer({ alpha, width, height, ms: { matte: t1 - t0, parse: t2 - t1 } }, [alpha.buffer]);
   },
 };

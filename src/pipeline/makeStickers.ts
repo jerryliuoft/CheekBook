@@ -123,7 +123,9 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
       const cropped = await canvas.crop(photo.blob, crop.rect, CROP_MAX_SIDE);
       const faceBox = toLocal(face.box, crop.rect, cropped.scale);
       // Face stickers are shaped to the head, so neighbours and clutter drop away.
-      const cut = await cutoutWorker().cutout(cropped.blob, faceBox, job.kind === 'face', progress);
+      const [lx, ly, rx, ry] = face.kps; // eye positions give the head's tilt
+      const roll = Math.atan2(ry - ly, rx - lx);
+      const cut = await cutoutWorker().cutout(cropped.blob, faceBox, job.kind === 'face', roll, progress);
       const t2 = performance.now();
       const st = await canvas.sticker(cropped.blob, Comlink.transfer(cut.alpha, [cut.alpha.buffer]), cut.width, cut.height, colors);
       const t3 = performance.now();

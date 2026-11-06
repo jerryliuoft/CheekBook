@@ -65,13 +65,18 @@ export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: n
     }
   }
   octx.drawImage(sil, 0, 0);
-  // Firm up the border's soft edge so it reads as a clean die-cut.
-  const od = octx.getImageData(0, 0, W, H);
+  // Blur, then cut at the middle: rounds off small bumps and notches so the
+  // border reads as one clean die-cut curve, the way a real sticker is cut.
+  const smooth = new OffscreenCanvas(W, H);
+  const mctx = smooth.getContext('2d', { willReadFrequently: true })!;
+  mctx.filter = `blur(${Math.max(2, border * 0.4)}px)`;
+  mctx.drawImage(outline, 0, 0);
+  const od = mctx.getImageData(0, 0, W, H);
   for (let i = 3; i < od.data.length; i += 4) {
     const a = od.data[i];
-    od.data[i] = a < 60 ? 0 : a > 140 ? 255 : Math.round(((a - 60) / 80) * 255);
+    od.data[i] = a < 100 ? 0 : a > 150 ? 255 : Math.round(((a - 100) / 50) * 255);
   }
-  octx.putImageData(od, 0, 0);
+  mctx.putImageData(od, 0, 0);
 
   // 4. Compose: shadowed border, then the photo on top.
   const out = new OffscreenCanvas(W, H);
@@ -79,7 +84,7 @@ export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: n
   ctx.shadowColor = colors.shadow;
   ctx.shadowBlur = shadow;
   ctx.shadowOffsetY = Math.round(shadow * 0.35);
-  ctx.drawImage(outline, 0, 0);
+  ctx.drawImage(smooth, 0, 0);
   ctx.shadowColor = 'transparent';
   ctx.drawImage(cut, 0, 0);
 
