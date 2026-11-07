@@ -78,6 +78,40 @@ function rotateAlpha(alpha: Uint8Array, w: number, h: number, face: Box, angle: 
   return out;
 }
 
+/**
+ * Adds held things to the alpha: each object's outline (keep), and the hands
+ * right around it, taken from the person's matte before the head trim.
+ */
+function addHeld(alpha: Uint8Array, keep: Uint8Array, person: Uint8Array | null, w: number, h: number) {
+  const reach = Math.max(4, Math.round(Math.max(w, h) * 0.04));
+  const near = person ? dilate(keep, w, h, reach) : null;
+  for (let i = 0; i < alpha.length; i++) {
+    let v = keep[i];
+    if (near && near[i] && person![i] > v) v = Math.min(person![i], near[i]);
+    if (v > alpha[i]) alpha[i] = v;
+  }
+}
+
+/** Soft dilation: box max over r (separable), as 0..255. */
+function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let m = 0;
+      for (let k = Math.max(0, x - r); k <= Math.min(w - 1, x + r); k++) if (src[y * w + k] > m) m = src[y * w + k];
+      tmp[y * w + x] = m;
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let m = 0;
+      for (let k = Math.max(0, y - r); k <= Math.min(h - 1, y + r); k++) if (tmp[k * w + x] > m) m = tmp[k * w + x];
+      out[y * w + x] = m;
+    }
+  }
+  return out;
+}
+
 export interface CutoutResult {
   alpha: Uint8Array; // width*height, 0..255
   width: number;
@@ -99,8 +133,20 @@ const api = {
    * Both models were trained on upright portraits: on a baby lying down the
    * matte cuts into the chin and cheeks and the parser loses the face. So a
    * tilted face crop is turned upright, cut out, and the mask turned back.
+   *
+   * held: boxes (crop pixels) of things the person holds; keep: their outline
+   * (w*h, 0..255). It is added back after the head trim, with the hands around
+   * it, so a bottle at the mouth doesn't leave a hole in the face.
    */
-  async cutout(image: Blob, faceBox: Box, head: boolean, roll: number, onProgress?: Progress): Promise<CutoutResult> {
+  async cutout(
+    image: Blob,
+    faceBox: Box,
+    head: boolean,
+    roll: number,
+    held: Box[],
+    keep: Uint8Array | null,
+    onProgress?: Progress,
+  ): Promise<CutoutResult> {
     const { model, processor } = await matter(onProgress);
     const src = await createImageBitmap(image);
     const { width, height } = src;
@@ -112,6 +158,9 @@ const api = {
     const { output } = await model({ input: pixel_values });
     const matte = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(width, height);
     let alpha: Uint8Array = new Uint8Array(matte.data);
+    // The person's matte before it is trimmed to the head: the hands holding a
+    // bottle or toy are taken from it.
+    let person: Uint8Array | null = held.length ? alpha.slice() : null;
     const t1 = performance.now();
 
     if (head) {
@@ -125,7 +174,12 @@ const api = {
       }
     }
     const t2 = performance.now();
-    if (turn) alpha = rotateAlpha(alpha, width, height, faceBox, turn);
+    if (turn) {
+      alpha = rotateAlpha(alpha, width, height, faceBox, turn);
+      if (person) person = rotateAlpha(person, width, height, faceBox, turn);
+    }
+
+    if (keep) addHeld(alpha, keep, person, width, height);
 
     // Last, keep only the blobs connected to the chosen face (drops other people and clutter).
     alpha = keepComponentsTouching(alpha, width, height, faceBox);

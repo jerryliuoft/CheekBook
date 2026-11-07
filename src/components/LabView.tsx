@@ -50,11 +50,6 @@ export function LabView() {
           <input type="range" min={16} max={120} step={4} value={s.minFacePx}
             onChange={(e) => updateSettings({ minFacePx: Number(e.target.value) })} />
         </label>
-        <label>
-          Stickers per page <b>{s.facesPerPage}</b>
-          <input type="range" min={3} max={16} step={1} value={s.facesPerPage}
-            onChange={(e) => updateSettings({ facesPerPage: Number(e.target.value) })} />
-        </label>
       </div>
 
       <h3>Timings on this computer</h3>

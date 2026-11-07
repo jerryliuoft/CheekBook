@@ -3,32 +3,31 @@ import { ImportView } from './components/ImportView';
 import { LabView } from './components/LabView';
 import { PeopleView } from './components/PeopleView';
 import { ScrapbookView } from './components/ScrapbookView';
-import { StickersView } from './components/StickersView';
 import { readLocal, writeLocal } from './lib/util';
 
-type Tab = 'import' | 'people' | 'stickers' | 'book' | 'lab';
+type Tab = 'photos' | 'book' | 'lab';
 
 const TABS: [Tab, string][] = [
-  ['import', '1 · Photos'],
-  ['people', '2 · People'],
-  ['stickers', '3 · Stickers'],
-  ['book', '4 · Scrapbook'],
+  ['photos', '1 · Photos & people'],
+  ['book', '2 · Scrapbook'],
   ['lab', 'Lab'],
 ];
 
-const PERSON_KEY = 'cheekbook.person';
+const TAB_KEY = 'cheekbook.tab';
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('import');
-  const [personId, setPersonIdState] = useState(() => readLocal<number | null>(PERSON_KEY, null));
+  const [tab, setTabState] = useState<Tab>(() => {
+    const saved = readLocal<string>(TAB_KEY, 'photos');
+    return TABS.some(([t]) => t === saved) ? (saved as Tab) : 'photos';
+  });
 
-  function setPersonId(id: number) {
-    setPersonIdState(id);
-    writeLocal(PERSON_KEY, id);
+  function setTab(t: Tab) {
+    setTabState(t);
+    writeLocal(TAB_KEY, t);
   }
 
   return (
-    <div className="app">
+    <div className={`app ${tab === 'book' ? 'wide' : ''}`}>
       <header>
         <h1>
           Cheek<span>Book</span>
@@ -42,17 +41,11 @@ export default function App() {
         </nav>
       </header>
       <main>
-        {tab === 'import' && <ImportView onDone={() => setTab('people')} />}
-        {tab === 'people' && (
-          <PeopleView
-            onPick={(id) => {
-              setPersonId(id);
-              setTab('stickers');
-            }}
-          />
-        )}
-        {tab === 'stickers' && (
-          <StickersView personId={personId} onPersonChange={setPersonId} onDone={() => setTab('book')} />
+        {tab === 'photos' && (
+          <div className="stack">
+            <ImportView />
+            <PeopleView onOpenBook={() => setTab('book')} />
+          </div>
         )}
         {tab === 'book' && <ScrapbookView />}
         {tab === 'lab' && <LabView />}

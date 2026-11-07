@@ -15,6 +15,8 @@ export const FACE_MODELS = {
   recognizer: '/models/w600k_r50.onnx', // ArcFace R50 (InsightFace buffalo_l)
   pose: '/models/pose_landmarker_full.task', // MediaPipe
   faceMesh: '/models/face_landmarker.task', // MediaPipe: expression and looking direction
+  objects: '/models/efficientdet_lite2.tflite', // MediaPipe: bottles, toys and other held things
+  magicTouch: '/models/magic_touch.tflite', // MediaPipe: outlines a held thing
   mediapipeWasm: '/mediapipe',
 };
 
@@ -22,14 +24,16 @@ export interface Settings {
   detScore: number; // min face detection confidence
   minFacePx: number; // ignore faces smaller than this (in the stored photo)
   clusterSim: number; // cosine similarity needed to join a person group
-  facesPerPage: number;
+  perPage: number; // most stickers a shuffle puts on a page; 0 = as many as fit
+  bookStyle: string; // see BOOK_STYLES
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   detScore: 0.45,
   minFacePx: 32,
   clusterSim: 0.42,
-  facesPerPage: 8,
+  perPage: 0,
+  bookStyle: 'linen',
 };
 
 // Stored copies of photos are downscaled to this longest side.

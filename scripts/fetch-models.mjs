@@ -70,7 +70,19 @@ if (!existsSync(faceMesh)) {
   console.log('Face landmarker already present');
 }
 
-// 4. MediaPipe wasm runtime, copied from node_modules so nothing loads from a CDN.
+// 4. MediaPipe object detector and MagicTouch segmenter (Apache-2.0): bottles
+//    and toys a baby holds, kept in the sticker.
+const mediapipeModels = [
+  ['efficientdet_lite2.tflite', 'object_detector/efficientdet_lite2/float16/latest/efficientdet_lite2.tflite'],
+  ['magic_touch.tflite', 'interactive_segmenter/magic_touch/float32/latest/magic_touch.tflite'],
+];
+for (const [file, path] of mediapipeModels) {
+  const dest = join(modelsDir, file);
+  if (!existsSync(dest)) await download(`https://storage.googleapis.com/mediapipe-models/${path}`, dest);
+  else console.log(`${file} already present`);
+}
+
+// 5. MediaPipe wasm runtime, copied from node_modules so nothing loads from a CDN.
 cpSync(join(root, 'node_modules', '@mediapipe', 'tasks-vision', 'wasm'), join(root, 'public', 'mediapipe'), {
   recursive: true,
 });

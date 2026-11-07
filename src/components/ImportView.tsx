@@ -13,7 +13,7 @@ const PHASE_LABEL: Record<ImportProgress['phase'], string> = {
   done: 'Done',
 };
 
-export function ImportView({ onDone }: { onDone: () => void }) {
+export function ImportView() {
   const folderInput = useRef<HTMLInputElement>(null);
   const filesInput = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
@@ -40,7 +40,7 @@ export function ImportView({ onDone }: { onDone: () => void }) {
 
   return (
     <section className="panel">
-      <h2>1 · Bring in your photos</h2>
+      <h2>Bring in your photos</h2>
       <p className="muted">
         Photos stay on this computer. CheekBook stores a resized copy in your browser and finds every face in them.
       </p>
@@ -79,9 +79,7 @@ export function ImportView({ onDone }: { onDone: () => void }) {
         />
       )}
       {progress?.phase === 'done' && (
-        <p className="ok">
-          All photos processed. <button className="link" onClick={onDone}>Go pick your baby →</button>
-        </p>
+        <p className="ok">All photos processed. Pick who gets stickers below.</p>
       )}
       {error && <p className="error">{error}</p>}
 

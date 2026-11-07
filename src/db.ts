@@ -24,6 +24,13 @@ export interface CropOption {
   reason?: string;
 }
 
+export interface HeldObject {
+  label: string; // COCO class, e.g. "bottle"
+  score: number;
+  box: Box;
+  nearFace?: boolean; // at the face (a bottle at the mouth): kept in face stickers too
+}
+
 export type Expression = 'laughing' | 'smiling' | 'surprised' | 'ooh' | 'sleepy' | 'crying' | 'upset' | 'calm';
 export type Looking = 'camera' | 'left' | 'right' | 'up' | 'down'; // as seen in the photo
 
@@ -39,6 +46,9 @@ export interface Face {
   locked: boolean; // user placed it manually; regrouping leaves it alone
   crops?: CropOption[];
   cropsVersion?: number; // crops are recomputed when the crop rules change
+  best?: CropKind | null; // the sticker to make: face if big and sharp, else a body crop
+  sharpness?: number;
+  held?: HeldObject[]; // things the person holds, kept in the sticker
   expression?: Expression; // empty if the face couldn't be read
   looking?: Looking;
   expressionVersion?: number; // faces are read again when the rules change
@@ -61,7 +71,7 @@ export interface Sticker {
   width: number;
   height: number;
   createdAt: number;
-  // scrapbook placement (page coordinates, page is 1000 x 1400)
+  // scrapbook placement (page coordinates, page is 1000 x 1400); page -1 = on the sticker sheet
   page: number;
   x: number;
   y: number;

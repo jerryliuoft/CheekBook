@@ -26,6 +26,12 @@
   --olive-600: #56653f;
   --brick-600: #9c3d2a;
   --white: #fffdf9;
+  --kraft: #d9c4a0;
+  --kraft-deep: #8f7150;
+  --sage-pale: #e7e6d8;
+  --sage-deep: #686f53;
+  --noir: #2c2522;
+  --noir-deep: #1d1816;
 
   /* Surfaces */
   --color-bg: var(--oat-100); /* page background */
@@ -82,5 +88,81 @@
   --shadow-panel: 0 1px 2px rgba(43, 36, 32, 0.04), 0 10px 30px rgba(59, 47, 40, 0.06);
   --shadow-page: 0 1px 1px rgba(43, 36, 32, 0.06), 0 14px 36px rgba(59, 47, 40, 0.14);
 
+  /* The open book: spine shading and the curl shadow of a turning page. */
+  --shade-spine: linear-gradient(90deg, rgba(20, 15, 12, 0.32), rgba(20, 15, 12, 0.08) 45%, rgba(255, 255, 255, 0.06) 70%, rgba(20, 15, 12, 0.18));
+  --shade-gutter: linear-gradient(90deg, rgba(43, 36, 32, 0.16), rgba(43, 36, 32, 0) 7%);
+  --shade-leaf: linear-gradient(90deg, rgba(43, 36, 32, 0) 60%, rgba(43, 36, 32, 0.18));
+  --shadow-book: 0 2px 3px rgba(43, 36, 32, 0.12), 0 22px 44px rgba(59, 47, 40, 0.22);
+
   color-scheme: light;
+}
+
+/*
+ * Album styles, picked on the Scrapbook tab. Each sets the paper, the cover
+ * board around it, the frame and the page-title lettering.
+ */
+[data-book='linen'] {
+  --book-title-scale: 1;
+  --book-paper: var(--paper);
+  --book-cover: var(--espresso-800);
+  --book-frame: var(--line) solid var(--oat-300);
+  --book-frame-inset: 2.2%;
+  --book-ink: var(--umber-500);
+  --book-title-family: var(--font-serif);
+  --book-title-style: italic;
+  --book-title-weight: 500;
+  --book-title-case: none;
+  --book-title-tracking: 0.01em;
+}
+[data-book='gallery'] {
+  --book-title-scale: 0.5;
+  --book-paper: var(--white);
+  --book-cover: var(--oat-400);
+  --book-frame: 3px double var(--taupe-500);
+  --book-frame-inset: 4%;
+  --book-ink: var(--espresso-900);
+  --book-title-family: var(--font-sans);
+  --book-title-style: normal;
+  --book-title-weight: 500;
+  --book-title-case: uppercase;
+  --book-title-tracking: 0.32em;
+}
+[data-book='kraft'] {
+  --book-title-scale: 1.1;
+  --book-paper: var(--kraft);
+  --book-cover: var(--kraft-deep);
+  --book-frame: 0 none;
+  --book-frame-inset: 0;
+  --book-ink: var(--espresso-800);
+  --book-title-family: var(--font-serif);
+  --book-title-style: italic;
+  --book-title-weight: 600;
+  --book-title-case: none;
+  --book-title-tracking: 0.01em;
+}
+[data-book='sage'] {
+  --book-title-scale: 1.15;
+  --book-paper: var(--sage-pale);
+  --book-cover: var(--sage-deep);
+  --book-frame: 2px solid var(--white);
+  --book-frame-inset: 3%;
+  --book-ink: var(--olive-600);
+  --book-title-family: var(--font-serif);
+  --book-title-style: italic;
+  --book-title-weight: 500;
+  --book-title-case: none;
+  --book-title-tracking: 0.02em;
+}
+[data-book='noir'] {
+  --book-title-scale: 1.7;
+  --book-paper: var(--noir);
+  --book-cover: var(--noir-deep);
+  --book-frame: var(--line) solid var(--camel);
+  --book-frame-inset: 3%;
+  --book-ink: var(--camel);
+  --book-title-family: var(--font-serif);
+  --book-title-style: italic;
+  --book-title-weight: 500;
+  --book-title-case: none;
+  --book-title-tracking: 0.04em;
 }

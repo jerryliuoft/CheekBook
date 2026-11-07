@@ -1,4 +1,4 @@
-import type { Box, CropKind, CropOption, Face } from '../db';
+import type { Box, CropKind, CropOption, Face, HeldObject } from '../db';
 import { boxArea, clampBox, unionBox } from './geometry';
 import type { Pose } from './pose';
 
@@ -8,7 +8,7 @@ const L_KNEE = 25, R_KNEE = 26, L_ANKLE = 27, R_ANKLE = 28;
 const VISIBLE = 0.5;
 
 // Bump when the crop rules change, so cached crops are recomputed.
-const CROPS_VERSION = 2;
+const CROPS_VERSION = 4;
 
 export function hasCurrentCrops(f: Face): boolean {
   return !!f.crops && f.cropsVersion === CROPS_VERSION;
@@ -51,9 +51,44 @@ function option(kind: CropKind, rect: Box, w: number, h: number, missing?: strin
   return { kind, rect: clipped, available: !reason, reason };
 }
 
-/** Works out face / upper-body / full-body crops for one face. */
-export function computeCrops(face: Box, w: number, h: number, poses: Pose[]): Pick<Face, 'crops' | 'cropsVersion'> {
+// A face sticker needs a face at least this big (stored-photo pixels) and this
+// sharp (see sharpness.ts); otherwise a body crop makes the better sticker.
+const FACE_MIN_PX = 120;
+const FACE_MIN_SHARPNESS = 0.1;
+
+const overlap = (a: Box, b: Box) =>
+  Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+
+/** Share of box a that lies inside box b. */
+const inside = (a: Box, b: Box) => overlap(a, b) / Math.max(1, boxArea(a));
+
+/** Grows a crop rect to take in the held objects, with a little margin. */
+function takeIn(rect: Box, objects: HeldObject[]): Box {
+  if (!objects.length) return rect;
+  return unionBox([rect, ...objects.map((o) => expand(o.box, 0.06))]);
+}
+
+/**
+ * Works out face / upper-body / full-body crops for one face, which things the
+ * person holds, and which crop makes the best sticker.
+ */
+export function computeCrops(
+  face: Box,
+  w: number,
+  h: number,
+  poses: Pose[],
+  objects: HeldObject[] = [],
+  sharpness = 1,
+): Pick<Face, 'crops' | 'cropsVersion' | 'held' | 'best' | 'sharpness'> {
   const fw = face[2] - face[0], fh = face[3] - face[1];
+  const size = Math.max(fw, fh);
+  // Hand-sized things that aren't the face itself (the detector sometimes boxes a face).
+  const candidates = objects.filter(
+    (o) => inside(o.box, face) < 0.5 && Math.max(o.box[2] - o.box[0], o.box[3] - o.box[1]) < size * 2.5,
+  );
+  // Touching the face: a bottle at the mouth, a toy against the cheek.
+  const faceZone = expand(face, 0.12);
+  const atFace = candidates.filter((o) => overlap(o.box, faceZone) > 0).map((o) => ({ ...o, nearFace: true }));
   const cx = (face[0] + face[2]) / 2;
   const pose = matchPose(face, poses);
   const vis = (i: number) => !!pose && pose[i].v >= VISIBLE;
@@ -63,7 +98,7 @@ export function computeCrops(face: Box, w: number, h: number, poses: Pose[]): Pi
   // hats (a baby's head is large next to its face). Face parsing trims it later.
   const fs = Math.max(fw, fh) * 2.2;
   const fcy = (face[1] + face[3]) / 2 - fh * 0.12;
-  const faceRect: Box = [cx - fs / 2, fcy - fs / 2, cx + fs / 2, fcy + fs / 2];
+  const faceRect = takeIn([cx - fs / 2, fcy - fs / 2, cx + fs / 2, fcy + fs / 2], atFace);
   const crops: CropOption[] = [option('face', faceRect, w, h)];
 
   // Upper body: head to hips. Uses pose when we have shoulders, otherwise face proportions.
@@ -78,15 +113,43 @@ export function computeCrops(face: Box, w: number, h: number, poses: Pose[]): Pi
   } else {
     upper = [cx - fw * 1.7, face[1] - fh * 0.45, cx + fw * 1.7, face[3] + fh * 2.4];
   }
+  // Things held in the hands, in front of the body.
+  const atFaceBoxes = new Set(atFace.map((o) => o.box));
+  const inHands = candidates.filter((o) => {
+    if (atFaceBoxes.has(o.box)) return false;
+    const c: Box = [(o.box[0] + o.box[2]) / 2, (o.box[1] + o.box[3]) / 2, 0, 0];
+    return c[0] > upper[0] && c[0] < upper[2] && c[1] > upper[1] && c[1] < upper[3];
+  });
+  const held = [...atFace, ...inHands];
+  upper = takeIn(upper, held);
   crops.push(option('upper', upper, w, h, undefined, face));
 
   // Full body: needs knees or ankles from the pose.
   if (pose && (vis(L_ANKLE) || vis(R_ANKLE) || vis(L_KNEE) || vis(R_KNEE))) {
     const pts = pose.filter((p) => p.v >= VISIBLE).map((p): Box => [p.x, p.y, p.x, p.y]);
-    const full = expand(unionBox([expand(face, 0.25, 0.45), ...pts]), 0.12, 0.06);
+    const full = takeIn(expand(unionBox([expand(face, 0.25, 0.45), ...pts]), 0.12, 0.06), held);
     crops.push(option('full', full, w, h));
   } else {
     crops.push(option('full', faceRect, w, h, 'Legs not visible'));
   }
-  return { crops, cropsVersion: CROPS_VERSION };
+  return { crops, cropsVersion: CROPS_VERSION, held, sharpness, best: bestKind(crops, size, sharpness, inHands.length > 0) };
+}
+
+/**
+ * Face sticker when the face is big and sharp; otherwise (or when the baby holds
+ * something away from the face) the upper or full body, so the sticker isn't a
+ * blurry face or a face missing its toy. Null when nothing makes a good sticker.
+ */
+function bestKind(crops: CropOption[], size: number, sharpness: number, holding: boolean): CropKind | null {
+  const ok = (k: CropKind) => crops.find((c) => c.kind === k)?.available;
+  const goodFace = ok('face') && size >= FACE_MIN_PX && sharpness >= FACE_MIN_SHARPNESS;
+  if (goodFace && !(holding && ok('upper'))) return 'face';
+  if (ok('upper')) return 'upper';
+  if (ok('full')) return 'full';
+  return ok('face') ? 'face' : null;
+}
+
+/** Held objects to keep in a sticker made from this crop. */
+export function heldIn(face: Face, kind: CropKind, rect: Box): Box[] {
+  return (face.held ?? []).filter((o) => (kind !== 'face' || o.nearFace) && inside(o.box, rect) > 0.6).map((o) => o.box);
 }
