@@ -38,6 +38,7 @@ export function ScrapbookView() {
   const [offPage, setOffPage] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const column = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(560);
 
@@ -115,9 +116,9 @@ export function ScrapbookView() {
     });
   }
 
+  // Asked on the page, not with window.confirm: embedded browsers block dialogs.
   async function clearAll() {
-    const placed = await db.stickers.where('page').aboveOrEqual(0).count();
-    if (!placed || !window.confirm(`Put all ${placed} stickers back on the sticker sheet?`)) return;
+    setConfirmClear(false);
     await run(async () => {
       await clearBook();
       setMinPages(1);
@@ -164,9 +165,19 @@ export function ScrapbookView() {
           <button className="primary" disabled={busy} onClick={shuffleAll} title="Deal every sticker into the book in a new order">
             Shuffle into book
           </button>
-          <button disabled={busy} onClick={clearAll}>
-            Clear book
-          </button>
+          {confirmClear ? (
+            <span className="confirm">
+              <span className="small">All stickers back to the sheet?</span>
+              <button className="danger" disabled={busy} onClick={clearAll}>
+                Clear
+              </button>
+              <button onClick={() => setConfirmClear(false)}>Cancel</button>
+            </span>
+          ) : (
+            <button disabled={busy || lastPage < 0} onClick={() => setConfirmClear(true)}>
+              Clear book
+            </button>
+          )}
         </div>
 
         <div className="book" data-book={style.id}>

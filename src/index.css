@@ -150,6 +150,7 @@ select {
 .book-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 28px; align-items: start; }
 .book-column { min-width: 0; }
 .book-tools { margin-top: 0; }
+.confirm { display: inline-flex; align-items: center; gap: 6px; }
 .book-tools label { display: flex; align-items: center; gap: 6px; color: var(--color-text-muted); }
 .book-nav { justify-content: flex-start; }
 .book-nav .page-num { font: italic 500 var(--text-lg) var(--font-serif); min-width: 120px; text-align: center; }
