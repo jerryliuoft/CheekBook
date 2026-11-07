@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { updateSettings, useSettings } from '../settings';
+import { ConfirmButton } from './common';
 
 export function LabView() {
   const s = useSettings();
@@ -19,8 +20,9 @@ export function LabView() {
   });
 
   async function clearAll() {
-    if (!confirm('Delete all photos, faces, people and stickers stored in this browser?')) return;
-    await Promise.all([db.photos.clear(), db.faces.clear(), db.people.clear(), db.stickers.clear(), db.timings.clear()]);
+    await db.transaction('rw', [db.photos, db.faces, db.people, db.stickers, db.timings], () =>
+      Promise.all([db.photos.clear(), db.faces.clear(), db.people.clear(), db.stickers.clear(), db.timings.clear()]),
+    );
   }
 
   return (
@@ -75,7 +77,13 @@ export function LabView() {
       )}
       <div className="row">
         <button onClick={() => db.timings.clear()}>Clear timings</button>
-        <button className="danger" onClick={clearAll}>Delete all data</button>
+        <ConfirmButton
+          className="danger"
+          label="Delete all data"
+          question="Delete every photo, face, person and sticker in this browser? This can't be undone."
+          confirmLabel="Delete everything"
+          onConfirm={clearAll}
+        />
       </div>
     </section>
   );
