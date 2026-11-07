@@ -8,7 +8,7 @@ const L_KNEE = 25, R_KNEE = 26, L_ANKLE = 27, R_ANKLE = 28;
 const VISIBLE = 0.5;
 
 // Bump when the crop rules change, so cached crops are recomputed.
-const CROPS_VERSION = 4;
+const CROPS_VERSION = 5;
 
 export function hasCurrentCrops(f: Face): boolean {
   return !!f.crops && f.cropsVersion === CROPS_VERSION;
@@ -54,7 +54,7 @@ function option(kind: CropKind, rect: Box, w: number, h: number, missing?: strin
 // A face sticker needs a face at least this big (stored-photo pixels) and this
 // sharp (see sharpness.ts); otherwise a body crop makes the better sticker.
 const FACE_MIN_PX = 120;
-const FACE_MIN_SHARPNESS = 0.1;
+const FACE_MIN_SHARPNESS = 0.09; // clearly blurry faces scored 0.07-0.088 on our photos
 
 const overlap = (a: Box, b: Box) =>
   Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
