@@ -1,12 +1,14 @@
 import * as Comlink from 'comlink';
 import { CROP_MAX_SIDE } from '../config';
 import { db, logTiming, type Box, type CropKind, type Face, type HeldObject, type Sticker } from '../db';
+import { newCaption } from '../lib/caption';
 import { computeCrops, hasCurrentCrops, heldIn } from '../lib/crops';
 import { expressionFields, hasCurrentExpression, readFaces } from '../lib/expression';
 import { detectObjects, segmentObjects } from '../lib/objects';
 import { detectPoses, type Pose } from '../lib/pose';
 import { faceSharpness } from '../lib/sharpness';
 import { token } from '../lib/theme';
+import { getSettings } from '../settings';
 import { groupBy } from '../lib/util';
 import type { CutoutResult } from '../workers/cutout.worker';
 import { cutoutWorker, imageWorkers } from '../workers/clients';
@@ -175,6 +177,7 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
       await logTiming('sticker total', t3 - t1, kind);
 
       // New stickers wait on the sticker sheet until placed or shuffled into the book.
+      const settings = getSettings();
       await db.stickers.add({
         faceId: face.id,
         photoId: photo.id,
@@ -189,6 +192,9 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
         y: 0,
         rotation: 0,
         scale: 1,
+        caption: settings.autoCaption
+          ? newCaption(face.expression, settings.captionLang, settings.captionStyle)
+          : undefined,
       } as Sticker);
     } catch (e) {
       console.error('Sticker failed', e);

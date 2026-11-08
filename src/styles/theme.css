@@ -67,6 +67,22 @@
   --sticker-edge: var(--white); /* die-cut border of new stickers */
   --sticker-shadow: rgba(59, 47, 40, 0.26);
 
+  /* Sticker captions (表情包 lettering), drawn on canvas */
+  --caption-classic-fill: #ffffff;
+  --caption-classic-stroke: #1c1714;
+  --caption-cute-fill: #ff8fab;
+  --caption-cute-stroke: #ffffff;
+  --caption-cute-edge: #a8475f;
+  --caption-hand-fill: #2a211c;
+  --caption-hand-stroke: #fffaf0;
+  --caption-bubble-fill: #ffffff;
+  --caption-bubble-stroke: #2a211c;
+  --caption-bubble-ink: #2a211c;
+  --caption-shadow: rgba(28, 23, 20, 0.28);
+  --font-caption-bold: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --font-caption-cute: 'ZCOOL KuaiLe', 'Noto Sans SC', sans-serif;
+  --font-caption-hand: 'Ma Shan Zheng', 'Noto Sans SC', cursive;
+
   /* Type */
   --font-serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
   --font-sans: 'Jost', 'Segoe UI', system-ui, sans-serif;

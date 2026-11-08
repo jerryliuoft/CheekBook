@@ -1,9 +1,26 @@
-import { useState, type ReactNode } from 'react';
-import { useObjectUrl } from './hooks';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { Sticker } from '../db';
+import { useObjectUrl, useStickerArt } from './hooks';
 
 export function BlobImg({ blob, alt = '', className }: { blob?: Blob | null; alt?: string; className?: string }) {
   const url = useObjectUrl(blob);
   return url ? <img src={url} alt={alt} className={className} draggable={false} /> : <div className={className} />;
+}
+
+/** A sticker as it looks in the book, caption included. */
+export function StickerImg({ sticker }: { sticker: Sticker }) {
+  const art = useStickerArt(sticker);
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c || !art) return;
+    c.width = art.image.width;
+    c.height = art.image.height;
+    const ctx = c.getContext('2d')!;
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.drawImage(art.image, 0, 0);
+  }, [art]);
+  return <canvas ref={ref} className="sticker-img" />;
 }
 
 export function Progress({ done, total, label }: { done: number; total: number; label?: ReactNode }) {

@@ -4,7 +4,7 @@ import { db, type Expression } from '../db';
 import { EXPRESSIONS } from '../lib/expression';
 import { toggled } from '../lib/util';
 import { SHEET } from '../pipeline/book';
-import { BlobImg } from './common';
+import { StickerImg } from './common';
 
 export const STICKER_DRAG_TYPE = 'application/x-cheekbook-sticker';
 
@@ -87,7 +87,7 @@ export function StickerSheet({ onAdd, disabled }: { onAdd: (id: number) => void;
                   e.dataTransfer.effectAllowed = 'move';
                 }}
               >
-                <BlobImg blob={sticker.blob} />
+                <StickerImg sticker={sticker} />
               </button>
               <button
                 className="sheet-delete"

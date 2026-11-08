@@ -61,6 +61,15 @@ export interface Person {
   createdAt: number;
 }
 
+export type CaptionPos = 'top' | 'bottom';
+
+/** Meme-style text on a sticker. Drawn live, never baked into the PNG. */
+export interface Caption {
+  text: string;
+  style: string; // see CAPTION_STYLES
+  pos: CaptionPos;
+}
+
 export interface Sticker {
   id: number;
   faceId: number;
@@ -77,6 +86,7 @@ export interface Sticker {
   y: number;
   rotation: number;
   scale: number;
+  caption?: Caption;
 }
 
 export interface Timing {

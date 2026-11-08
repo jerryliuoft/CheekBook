@@ -1,6 +1,7 @@
 // Laying stickers out in the scrapbook. A sticker is on a page (page >= 0) or
 // back on the sticker sheet (page = SHEET).
 import { db, type Sticker } from '../db';
+import { newCaption } from '../lib/caption';
 
 export const PAGE_W = 1000;
 export const PAGE_H = 1400;
@@ -30,6 +31,18 @@ function sizeFor(n: number) {
 }
 
 /**
+ * Rough height a caption adds past the cut-out, in sticker pixels (negative
+ * when it sits on top), so shuffled stickers leave room for their text.
+ */
+function captionExtra(s: Sticker): number {
+  const text = s.caption?.text.trim();
+  if (!text) return 0;
+  const lines = text.length > (/[⺀-鿿]/.test(text) ? 6 : 12) ? 2 : 1;
+  const extra = lines * 0.27 * s.width;
+  return s.caption!.pos === 'top' ? -extra : extra;
+}
+
+/**
  * Spots for stickers sharing a page: a loose grid, shuffled and jittered, so
  * the page looks arranged by hand rather than tiled.
  */
@@ -43,13 +56,16 @@ function layout(stickers: Sticker[]): Map<number, Spot> {
   const out = new Map<number, Spot>();
   stickers.forEach((s, i) => {
     const cell = cells[i];
-    const scale = (target * rand(0.88, 1.12)) / Math.max(s.width, s.height);
-    const sw = s.width * scale, sh = s.height * scale;
+    const extra = captionExtra(s);
+    const scale = (target * rand(0.88, 1.12)) / Math.max(s.width, s.height + Math.abs(extra));
+    // Centre the sticker and its caption together in the cell.
+    const sw = s.width * scale, sh = (s.height + Math.abs(extra)) * scale;
+    const shift = (-extra * scale) / 2;
     const cx = AREA.x0 + ((cell % cols) + 0.5) * cw + rand(-0.15, 0.15) * cw;
     const cy = AREA.y0 + (Math.floor(cell / cols) + 0.5) * ch + rand(-0.15, 0.15) * ch;
     out.set(s.id, {
       x: Math.min(PAGE_W - sw / 2 - 20, Math.max(sw / 2 + 20, cx)),
-      y: Math.min(PAGE_H - sh / 2 - 20, Math.max(sh / 2 + 100, cy)),
+      y: Math.min(PAGE_H - sh / 2 - 20, Math.max(sh / 2 + 100, cy)) + shift,
       scale,
       rotation: tilt(),
     });
@@ -132,5 +148,23 @@ export async function shufflePage(page: number) {
   const spots = layout(list);
   await db.transaction('rw', db.stickers, async () => {
     for (const s of list) await db.stickers.update(s.id, spots.get(s.id)!);
+  });
+}
+
+/** Gives every sticker without a caption one picked from its expression. */
+export async function captionAll(lang: string, style: string): Promise<number> {
+  const stickers = (await db.stickers.toArray()).filter((s) => !s.caption?.text.trim());
+  const faces = await db.faces.bulkGet(stickers.map((s) => s.faceId));
+  await db.transaction('rw', db.stickers, () =>
+    Promise.all(
+      stickers.map((s, i) => db.stickers.update(s.id, { caption: newCaption(faces[i]?.expression, lang, style) })),
+    ),
+  );
+  return stickers.length;
+}
+
+export async function removeAllCaptions() {
+  await db.stickers.toCollection().modify((s) => {
+    delete s.caption;
   });
 }

@@ -28,7 +28,9 @@ Open http://localhost:5173. The first time you make stickers, the browser also d
 | | Each face is tagged with an expression (laughing, smiling, surprised, ooh, eyes closed, crying, upset, calm) and where it looks | MediaPipe Face Landmarker blendshapes + rules in `src/lib/expression.ts` |
 | | The person is cut out on a crop of at most 1024 px; face stickers are shaped to the head by face parsing (hair, ears and chin in; neck, clothes and background out) | MODNet + SegFormer face parsing via Transformers.js (CPU) |
 | | The cut-out becomes a sticker (white border, shadow) and goes on the sticker sheet | OffscreenCanvas in a Web Worker |
+| | New stickers get a meme-style caption (表情包) picked from their expression, in Chinese, English or both | `src/lib/caption.ts` |
 | 2 · Scrapbook | An album (five styles) with page-turn animation, and the sticker sheet beside it. Click or drag a sticker onto the page, drag one off the page to put it back, or shuffle every sticker into the book (up to N a page, or as many as fit). Drag, rotate and resize on the page | react-konva, `src/pipeline/book.ts` |
+| | Select a sticker to edit its caption: type your own, 🎲 for another idea, pick a style (经典 Classic, 可爱 Cute, 手写 Handwritten, 气泡 Bubble), put it above or below. Captions are drawn live and never baked into the sticker, so "Remove captions" undoes them all | `src/lib/caption.ts`, Noto Sans SC, ZCOOL KuaiLe and Ma Shan Zheng via Fontsource |
 
 The **Lab** tab has thresholds and a timing table for every step on your computer.
 
@@ -43,7 +45,7 @@ src/
   workers/cutout.worker.ts MODNet matting + face parsing (Transformers.js, CPU)
   workers/clients.ts       one lazily created instance of each worker
   pipeline/             import → detect → group; analyse → cut out → sticker; book layout (book.ts)
-  lib/                  geometry, clustering, crop rules, masks, sticker effect, pose, expression, objects, sharpness, album styles
+  lib/                  geometry, clustering, crop rules, masks, sticker effect, pose, expression, objects, sharpness, album styles, captions
   components/           one view per tab
   styles/theme.css      the design system: every colour, font, corner, line and shadow
   index.css             app styles, built only from theme tokens
@@ -53,7 +55,7 @@ scripts/check-theme.mjs   part of `npm run lint`: fails on colours written outsi
 
 ## Look and feel
 
-The theme is "Oat & Espresso": oat and cream surfaces, espresso text and buttons, camel and sage accents, Cormorant Garamond for headings and Jost for text, thin lines and small corners. It is light only. The album styles (Linen, Gallery, Kraft, Sage, Noir) are blocks of tokens under `[data-book=…]` in the same file, with their names and page titles in `src/lib/bookStyles.ts`. To change the look, edit the tokens in `src/styles/theme.css`. New UI uses `var(--color-…)` and friends, and canvas code reads tokens with `token()` from `src/lib/theme.ts`. A line that truly needs a raw colour (for example a model's input canvas) can opt out with a `theme-ok` comment.
+The theme is "Oat & Espresso": oat and cream surfaces, espresso text and buttons, camel and sage accents, Cormorant Garamond for headings and Jost for text, thin lines and small corners. It is light only. The album styles (Linen, Gallery, Kraft, Sage, Noir) are blocks of tokens under `[data-book=…]` in the same file, with their names and page titles in `src/lib/bookStyles.ts`. To change the look, edit the tokens in `src/styles/theme.css`. New UI uses `var(--color-…)` and friends, and canvas code reads tokens with `token()` from `src/lib/theme.ts`. Caption colours and fonts are the `--caption-…` and `--font-caption-…` tokens. The caption fonts are bundled with the app (no Google Fonts requests) and split by character range, so the browser fetches only the pieces for the characters on screen. A line that truly needs a raw colour (for example a model's input canvas) can opt out with a `theme-ok` comment.
 
 ## Notes and known limits
 

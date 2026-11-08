@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { Caption, Sticker } from '../db';
+import { captionTilt, composeSticker } from '../lib/caption';
 
 /** Object URL for a blob, revoked when the blob changes or the component unmounts. */
 export function useObjectUrl(blob: Blob | undefined | null): string | undefined {
@@ -30,4 +32,38 @@ export function useImageBitmap(blob: Blob | undefined | null): ImageBitmap | und
     };
   }, [blob]);
   return bmp;
+}
+
+/**
+ * A sticker ready to draw: the cut-out alone, or the cut-out with its caption
+ * on a bigger canvas. `ax`/`ay` is the cut-out's centre in that image, and
+ * `w`/`h` are the cut-out's own size, so callers can keep it anchored.
+ */
+export interface StickerArt {
+  image: ImageBitmap | HTMLCanvasElement;
+  ax: number;
+  ay: number;
+  w: number;
+  h: number;
+}
+
+export function useStickerArt(sticker: Sticker): StickerArt | undefined {
+  const bmp = useImageBitmap(sticker.blob);
+  const key = sticker.caption?.text.trim() ? JSON.stringify(sticker.caption) : '';
+  const [composed, setComposed] = useState<{ key: string; art: StickerArt }>();
+  useEffect(() => {
+    if (!bmp || !key) return;
+    const stale = new AbortController();
+    composeSticker(bmp, JSON.parse(key) as Caption, captionTilt(sticker.id)).then(({ canvas, ax, ay }) => {
+      if (!stale.signal.aborted) setComposed({ key, art: { image: canvas, ax, ay, w: bmp.width, h: bmp.height } });
+    });
+    return () => stale.abort();
+  }, [bmp, key, sticker.id]);
+  const plain = useMemo(
+    () => bmp && { image: bmp, ax: bmp.width / 2, ay: bmp.height / 2, w: bmp.width, h: bmp.height },
+    [bmp],
+  );
+  if (!key) return plain;
+  // Keep showing the last drawing while a new caption is drawn (no flicker while typing).
+  return composed?.art ?? plain;
 }

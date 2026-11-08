@@ -2,21 +2,24 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import type Konva from 'konva';
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import { Image as KImage, Layer, Rect, Stage, Transformer } from 'react-konva';
-import { db, type Sticker } from '../db';
+import { db, type Caption, type Sticker } from '../db';
 import { BOOK_STYLES, bookStyle, type BookStyle } from '../lib/bookStyles';
+import { CAPTION_LANGS, CAPTION_STYLES, suggestCaption } from '../lib/caption';
 import { tapeColors, token } from '../lib/theme';
 import {
   PAGE_H,
   PAGE_W,
+  captionAll,
   clearBook,
   placeSticker,
+  removeAllCaptions,
   returnToSheet,
   shuffleIntoBook,
   shufflePage,
 } from '../pipeline/book';
 import { updateSettings, useSettings } from '../settings';
 import { ConfirmButton, Empty } from './common';
-import { useImageBitmap } from './hooks';
+import { useStickerArt } from './hooks';
 import { StickerSheet, STICKER_DRAG_TYPE } from './StickerSheet';
 
 const PER_PAGE_CHOICES = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 16];
@@ -171,6 +174,56 @@ export function ScrapbookView() {
           />
         </div>
 
+        <div className="row book-tools captions-tools">
+          <label className="small" title="New stickers get a caption picked from their expression">
+            <input
+              type="checkbox"
+              checked={settings.autoCaption}
+              onChange={(e) => updateSettings({ autoCaption: e.target.checked })}
+            />{' '}
+            Captions on new stickers
+          </label>
+          <select
+            className="small"
+            value={settings.captionLang}
+            onChange={(e) => updateSettings({ captionLang: e.target.value })}
+            aria-label="Caption language"
+          >
+            {CAPTION_LANGS.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="small"
+            value={settings.captionStyle}
+            onChange={(e) => updateSettings({ captionStyle: e.target.value })}
+            aria-label="Caption style"
+          >
+            {CAPTION_STYLES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <span className="spacer" />
+          <button
+            disabled={busy}
+            onClick={() => run(() => captionAll(settings.captionLang, settings.captionStyle))}
+            title="Give every sticker without a caption one that fits its expression"
+          >
+            Caption all
+          </button>
+          <ConfirmButton
+            label="Remove captions"
+            question="Take the caption off every sticker?"
+            confirmLabel="Remove"
+            disabled={busy}
+            onConfirm={() => run(removeAllCaptions)}
+          />
+        </div>
+
         <div className="book" data-book={style.id}>
           <div className="book-cover">
             <div
@@ -242,6 +295,7 @@ export function ScrapbookView() {
             Add page
           </button>
         </div>
+        {selectedId != null && <CaptionBar key={selectedId} id={selectedId} />}
         <p className="muted small">
           Drag stickers to move them, or off the page to put them back. Click one to turn or resize it. Arrow keys turn
           pages.
@@ -249,6 +303,79 @@ export function ScrapbookView() {
       </section>
 
       <StickerSheet disabled={!!flip} onAdd={(id) => placeSticker(id, page)} />
+    </div>
+  );
+}
+
+/** Edits the caption of the selected sticker. */
+function CaptionBar({ id }: { id: number }) {
+  const settings = useSettings();
+  const data = useLiveQuery(async () => {
+    const sticker = await db.stickers.get(id);
+    const face = sticker && (await db.faces.get(sticker.faceId));
+    return sticker ? { caption: sticker.caption, expression: face?.expression } : null;
+  }, [id]);
+  // The text box keeps its own state so typing never waits on the database.
+  const [text, setText] = useState<string | null>(null);
+  if (!data) return null;
+  const c = data.caption;
+  const shown = text ?? c?.text ?? '';
+  const save = (patch: Partial<Caption>) =>
+    db.stickers.update(id, {
+      caption: { text: shown, style: c?.style ?? settings.captionStyle, pos: c?.pos ?? 'bottom', ...patch },
+    });
+  const write = (t: string) => {
+    setText(t);
+    if (t.trim() || c) save({ text: t });
+  };
+
+  return (
+    <div className="caption-bar">
+      <input
+        value={shown}
+        placeholder="Add a caption…"
+        maxLength={24}
+        onChange={(e) => write(e.target.value)}
+        aria-label="Caption"
+      />
+      <button
+        title="Another idea"
+        aria-label="Another caption idea"
+        onClick={() => write(suggestCaption(data.expression, settings.captionLang, shown))}
+      >
+        🎲
+      </button>
+      <div className="filter-row">
+        {CAPTION_STYLES.map((st) => (
+          <button
+            key={st.id}
+            className={`chip small ${(c?.style ?? settings.captionStyle) === st.id ? 'on' : ''}`}
+            onClick={() => save({ style: st.id })}
+            disabled={!shown.trim()}
+          >
+            {st.name.split(' ')[0]}
+          </button>
+        ))}
+        <button
+          className="chip small"
+          disabled={!shown.trim()}
+          onClick={() => save({ pos: c?.pos === 'top' ? 'bottom' : 'top' })}
+          title="Put the caption above or below the sticker"
+        >
+          {c?.pos === 'top' ? '↓ Below' : '↑ Above'}
+        </button>
+        {c && (
+          <button
+            className="chip small"
+            onClick={() => {
+              setText('');
+              db.stickers.update(id, { caption: undefined });
+            }}
+          >
+            ✕ Remove
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -318,7 +445,7 @@ function StickerNode(props: {
   onOffPage?: (off: boolean) => void;
 }) {
   const { sticker, selected, onSelect } = props;
-  const img = useImageBitmap(sticker.blob);
+  const art = useStickerArt(sticker);
   const node = useRef<Konva.Image>(null);
   const tr = useRef<Konva.Transformer>(null);
   const tapes = tapeColors();
@@ -331,9 +458,10 @@ function StickerNode(props: {
     }
   }, [selected]);
 
-  if (!img) return null;
+  if (!art) return null;
   const w = sticker.width * sticker.scale;
   const h = sticker.height * sticker.scale;
+  const k = w / art.w; // page units per sticker pixel; the caption canvas can be bigger than the cut-out
   // Tape sits on the sticker's top edge, following its rotation.
   const tapeOffset = -(h / 2 - 14);
 
@@ -360,13 +488,13 @@ function StickerNode(props: {
     <>
       <KImage
         ref={node}
-        image={img}
+        image={art.image}
         x={sticker.x}
         y={sticker.y}
-        width={w}
-        height={h}
-        offsetX={w / 2}
-        offsetY={h / 2}
+        width={art.image.width * k}
+        height={art.image.height * k}
+        offsetX={art.ax * k}
+        offsetY={art.ay * k}
         rotation={sticker.rotation}
         draggable
         onMouseDown={onSelect}
@@ -376,7 +504,7 @@ function StickerNode(props: {
         onDragEnd={save}
         onTransformEnd={save}
       />
-      {props.tape && sticker.id % 3 === 0 && (
+      {props.tape && sticker.id % 3 === 0 && sticker.caption?.pos !== 'top' && (
         // A strip of washi tape across the top of every third sticker.
         <Rect
           x={sticker.x - tapeOffset * Math.sin((sticker.rotation * Math.PI) / 180)}

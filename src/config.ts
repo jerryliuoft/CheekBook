@@ -26,6 +26,9 @@ export interface Settings {
   clusterSim: number; // cosine similarity needed to join a person group
   perPage: number; // most stickers a shuffle puts on a page; 0 = as many as fit
   bookStyle: string; // see BOOK_STYLES
+  autoCaption: boolean; // new stickers get a caption picked from their expression
+  captionLang: string; // 'zh' | 'en' | 'both'
+  captionStyle: string; // style for new captions, see CAPTION_STYLES
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -34,6 +37,9 @@ export const DEFAULT_SETTINGS: Settings = {
   clusterSim: 0.42,
   perPage: 0,
   bookStyle: 'linen',
+  autoCaption: true,
+  captionLang: 'zh',
+  captionStyle: 'classic',
 };
 
 // Stored copies of photos are downscaled to this longest side.
