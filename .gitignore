@@ -27,3 +27,6 @@ dist-ssr
 public/models/
 public/mediapipe/
 public/dev-photos/
+
+# Firebase deploy cache
+.firebase/

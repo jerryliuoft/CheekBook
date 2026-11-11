@@ -16,6 +16,17 @@ npm run dev
 
 Open http://localhost:5173. The first time you make stickers, the browser also downloads the cut-out models from the Hugging Face Hub (MODNet, 26 MB, and face parsing, 89 MB) and caches them.
 
+## Live site
+
+https://cheekbook-baby.web.app, on Firebase Hosting's free Spark plan (no billing account, so it can't cost money). To deploy a new version:
+
+```bash
+npm run build
+firebase deploy --only hosting
+```
+
+`firebase.json` sends the cross-origin isolation headers, caches models for 30 days, and leaves `dev-photos/` out of the upload. The free plan allows about 360 MB of downloads a day. A first visit downloads about 210 MB of models, after which the browser keeps them, so only one or two new visitors a day fit. Past the limit the site goes offline until the next day; it is never billed.
+
 ## How it works
 
 | Step | What happens | Model / library |
