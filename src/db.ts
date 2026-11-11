@@ -87,6 +87,7 @@ export interface Sticker {
   rotation: number;
   scale: number;
   caption?: Caption;
+  upright?: boolean; // made with the head turned right side up (see uprightTurn)
 }
 
 export interface Timing {

@@ -82,7 +82,20 @@ function toLocal(b: Box, origin: Box, scale: number): Box {
   ];
 }
 
-type Cut = { image: Blob; faceBox: Box; result: CutoutResult };
+type Cut = { image: Blob; faceBox: Box; result: CutoutResult; roll: number };
+
+// A head tilted further than this is turned right side up on the sticker;
+// smaller tilts are kept, they look natural.
+const UPRIGHT_ABOVE = (30 * Math.PI) / 180;
+
+/** The head's tilt in the photo, in radians, from the eye line. */
+export function headRoll(face: Face): number {
+  const [lx, ly, rx, ry] = face.kps;
+  return Math.atan2(ry - ly, rx - lx);
+}
+
+/** Rotation that puts the head right side up, or 0 when it nearly is. */
+export const uprightTurn = (roll: number) => (Math.abs(roll) > UPRIGHT_ABOVE ? -roll : 0);
 
 /** Crops the photo for this kind of sticker and cuts the person out. */
 async function cutOut(face: Face, photo: Blob, kind: CropKind, progress: (msg: string) => void): Promise<Cut | null> {
@@ -90,8 +103,7 @@ async function cutOut(face: Face, photo: Blob, kind: CropKind, progress: (msg: s
   if (!crop?.available) return null;
   const cropped = await imageWorkers()[0].crop(photo, crop.rect, CROP_MAX_SIDE);
   const faceBox = toLocal(face.box, crop.rect, cropped.scale);
-  const [lx, ly, rx, ry] = face.kps; // eye positions give the head's tilt
-  const roll = Math.atan2(ry - ly, rx - lx);
+  const roll = headRoll(face);
   // A bottle or toy the baby holds stays in, outlined separately (the person
   // cut-out drops it, which can leave a hole in the face).
   const held = heldIn(face, kind, crop.rect).map((b) => toLocal(b, crop.rect, cropped.scale));
@@ -113,7 +125,7 @@ async function cutOut(face: Face, photo: Blob, kind: CropKind, progress: (msg: s
     keep ? Comlink.transfer(keep, [keep.buffer]) : null,
     progress,
   );
-  return { image: cropped.blob, faceBox, result };
+  return { image: cropped.blob, faceBox, result, roll };
 }
 
 /** Share of the face box the cut-out kept (0..1). */
@@ -133,6 +145,7 @@ function faceCoverage({ faceBox: b, result: { alpha, width } }: Cut): number {
 export interface StickerJob {
   faceId: number;
   kind: CropKind;
+  replace?: number; // remake this sticker in place (keeps its page, spot and caption)
 }
 
 export async function makeStickers(jobs: StickerJob[], onProgress: (done: number, total: number, msg: string) => void) {
@@ -169,13 +182,29 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
       }
       const t2 = performance.now();
       const { alpha, width, height } = cut.result;
-      const st = await canvas.sticker(cut.image, Comlink.transfer(alpha, [alpha.buffer]), width, height, colors);
+      const st = await canvas.sticker(
+        cut.image,
+        Comlink.transfer(alpha, [alpha.buffer]),
+        width,
+        height,
+        colors,
+        uprightTurn(cut.roll),
+      );
       const t3 = performance.now();
       await logTiming('matting', cut.result.ms.matte, `${width}x${height}`);
       if (kind === 'face') await logTiming('face parsing', cut.result.ms.parse);
       await logTiming('sticker effect', t3 - t2);
       await logTiming('sticker total', t3 - t1, kind);
 
+      if (job.replace != null) {
+        const old = await db.stickers.get(job.replace);
+        if (old) {
+          // Same size on the page as before.
+          const scale = (old.scale * Math.max(old.width, old.height)) / Math.max(st.width, st.height);
+          await db.stickers.update(old.id, { kind, blob: st.blob, width: st.width, height: st.height, scale, upright: true });
+          continue;
+        }
+      }
       // New stickers wait on the sticker sheet until placed or shuffled into the book.
       const settings = getSettings();
       await db.stickers.add({
@@ -192,6 +221,7 @@ export async function makeStickers(jobs: StickerJob[], onProgress: (done: number
         y: 0,
         rotation: 0,
         scale: 1,
+        upright: true,
         caption: settings.autoCaption
           ? newCaption(face.expression, settings.captionLang, settings.captionStyle)
           : undefined,
@@ -230,4 +260,14 @@ export async function makeStickersFor(
   const jobs = fresh.filter((f): f is Face => !!f?.best).map((f) => ({ faceId: f.id, kind: f.best! }));
   if (jobs.length) await makeStickers(jobs, onProgress);
   return jobs.length;
+}
+
+/** Stickers made before heads were turned upright whose head lies sideways or upside down. */
+export async function sidewaysStickers(): Promise<StickerJob[]> {
+  const stickers = (await db.stickers.toArray()).filter((s) => !s.upright);
+  const faces = await db.faces.bulkGet(stickers.map((s) => s.faceId));
+  return stickers.flatMap((s, i) => {
+    const f = faces[i];
+    return f && uprightTurn(headRoll(f)) ? [{ faceId: f.id, kind: s.kind, replace: s.id }] : [];
+  });
 }

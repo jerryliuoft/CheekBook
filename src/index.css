@@ -273,6 +273,9 @@ select {
   100% { transform: rotateY(0deg); opacity: 1; }
 }
 
+/* Notice above the book */
+.notice { gap: 10px; padding: 8px 12px; margin: 0 0 8px; background: var(--color-tint); border-radius: var(--radius-md); font-size: var(--text-sm); }
+
 /* Captions */
 .captions-tools { margin-top: -4px; }
 .captions-tools input[type='checkbox'] { vertical-align: middle; }

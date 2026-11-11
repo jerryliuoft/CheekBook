@@ -18,7 +18,8 @@ import {
   shufflePage,
 } from '../pipeline/book';
 import { updateSettings, useSettings } from '../settings';
-import { ConfirmButton, Empty } from './common';
+import { makeStickers, sidewaysStickers } from '../pipeline/makeStickers';
+import { ConfirmButton, Empty, Progress } from './common';
 import { useStickerArt } from './hooks';
 import { StickerSheet, STICKER_DRAG_TYPE } from './StickerSheet';
 
@@ -140,6 +141,7 @@ export function ScrapbookView() {
   return (
     <div className="book-layout">
       <section className="book-column" ref={column}>
+        <UprightNotice />
         <div className="row book-tools">
           <label className="small">
             Style{' '}
@@ -304,6 +306,35 @@ export function ScrapbookView() {
 
       <StickerSheet disabled={!!flip} onAdd={(id) => placeSticker(id, page)} />
     </div>
+  );
+}
+
+/** Offers to remake stickers from before heads were turned right side up. */
+function UprightNotice() {
+  const jobs = useLiveQuery(sidewaysStickers);
+  const [making, setMaking] = useState<{ done: number; total: number; msg: string } | null>(null);
+  if (making) return <Progress done={making.done} total={making.total} label={making.msg} />;
+  if (!jobs?.length) return null;
+  const n = jobs.length;
+  return (
+    <p className="notice row">
+      <span>
+        {n} sticker{n === 1 ? ' has its' : 's have their'} head on its side or upside down.
+      </span>
+      <button
+        className="small primary"
+        onClick={async () => {
+          setMaking({ done: 0, total: n, msg: 'Starting…' });
+          try {
+            await makeStickers(jobs, (done, total, msg) => setMaking({ done, total, msg }));
+          } finally {
+            setMaking(null);
+          }
+        }}
+      >
+        Turn {n === 1 ? 'it' : 'them'} right side up
+      </button>
+    </p>
   );
 }
 

@@ -9,20 +9,12 @@ export interface StickerColors {
   shadow: string;
 }
 
-export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: number, colors: StickerColors) {
-  // 1. Cut-out with alpha applied, slightly warmer and brighter.
-  const bmp = await createImageBitmap(crop);
-  const base = new OffscreenCanvas(w, h);
-  const bctx = base.getContext('2d', { willReadFrequently: true })!;
-  bctx.filter = 'saturate(1.12) brightness(1.04) contrast(1.02)';
-  bctx.drawImage(bmp, 0, 0, w, h);
-  bmp.close();
-  const img = bctx.getImageData(0, 0, w, h);
+/** Bounds of the opaque part of an image. */
+function opaqueBounds(img: ImageData) {
+  const { width: w, height: h, data } = img;
   let x1 = w, y1 = h, x2 = -1, y2 = -1;
   for (let i = 0; i < w * h; i++) {
-    const a = alpha[i] < 16 ? 0 : alpha[i]; // drop faint haze
-    img.data[i * 4 + 3] = a;
-    if (a > 40) {
+    if (data[i * 4 + 3] > 40) {
       const x = i % w, y = (i / w) | 0;
       if (x < x1) x1 = x;
       if (x > x2) x2 = x;
@@ -30,8 +22,39 @@ export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: n
       if (y > y2) y2 = y;
     }
   }
-  if (x2 < 0) throw new Error('Cut-out came back empty');
+  return { x1, y1, x2, y2 };
+}
+
+/**
+ * turn: radians to rotate the cut-out by before the border goes on, so a
+ * head lying sideways or upside down ends up right side up on the sticker.
+ */
+export async function makeSticker(crop: Blob, alpha: Uint8Array, w: number, h: number, colors: StickerColors, turn = 0) {
+  // 1. Cut-out with alpha applied, slightly warmer and brighter.
+  const bmp = await createImageBitmap(crop);
+  let base = new OffscreenCanvas(w, h);
+  const bctx = base.getContext('2d', { willReadFrequently: true })!;
+  bctx.filter = 'saturate(1.12) brightness(1.04) contrast(1.02)';
+  bctx.drawImage(bmp, 0, 0, w, h);
+  bmp.close();
+  const img = bctx.getImageData(0, 0, w, h);
+  for (let i = 0; i < w * h; i++) img.data[i * 4 + 3] = alpha[i] < 16 ? 0 : alpha[i]; // drop faint haze
   bctx.putImageData(img, 0, 0);
+
+  if (turn) {
+    // Rotate about the centre onto a canvas big enough for any angle.
+    const cos = Math.abs(Math.cos(turn)), sin = Math.abs(Math.sin(turn));
+    const rw = Math.ceil(w * cos + h * sin), rh = Math.ceil(w * sin + h * cos);
+    const rot = new OffscreenCanvas(rw, rh);
+    const rctx = rot.getContext('2d', { willReadFrequently: true })!;
+    rctx.imageSmoothingQuality = 'high';
+    rctx.translate(rw / 2, rh / 2);
+    rctx.rotate(turn);
+    rctx.drawImage(base, -w / 2, -h / 2);
+    base = rot;
+  }
+  const { x1, y1, x2, y2 } = opaqueBounds(base.getContext('2d')!.getImageData(0, 0, base.width, base.height));
+  if (x2 < 0) throw new Error('Cut-out came back empty');
 
   // 2. Trim and scale to output size.
   const tw = x2 - x1 + 1, th = y2 - y1 + 1;
