@@ -5,6 +5,7 @@
 import { InteractiveSegmenterLegacy, ObjectDetector } from '@mediapipe/tasks-vision';
 import { FACE_MODELS } from '../config';
 import type { Box, HeldObject } from '../db';
+import { modelBytes } from './modelCache';
 import { visionFiles } from './mediapipe';
 
 // COCO classes small enough to be held, and likely around a baby.
@@ -17,9 +18,9 @@ let detector: Promise<ObjectDetector> | null = null;
 let segmenter: Promise<InteractiveSegmenterLegacy> | null = null;
 
 const getDetector = () =>
-  (detector ??= visionFiles().then((vision) =>
+  (detector ??= Promise.all([visionFiles(), modelBytes(FACE_MODELS.objects)]).then(([vision, model]) =>
     ObjectDetector.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: FACE_MODELS.objects, delegate: 'CPU' },
+      baseOptions: { modelAssetBuffer: model, delegate: 'CPU' },
       runningMode: 'IMAGE',
       scoreThreshold: 0.3,
       maxResults: 20,
@@ -27,9 +28,9 @@ const getDetector = () =>
   ));
 
 const getSegmenter = () =>
-  (segmenter ??= visionFiles().then((vision) =>
+  (segmenter ??= Promise.all([visionFiles(), modelBytes(FACE_MODELS.magicTouch)]).then(([vision, model]) =>
     InteractiveSegmenterLegacy.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: FACE_MODELS.magicTouch, delegate: 'CPU' },
+      baseOptions: { modelAssetBuffer: model, delegate: 'CPU' },
       outputCategoryMask: false,
       outputConfidenceMasks: true,
     }),

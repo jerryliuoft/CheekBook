@@ -10,14 +10,23 @@ export const CUTOUT_MODEL = 'Xenova/modnet';
 export const PARSER_MODEL = 'jonathandinu/face-parsing';
 export const PARSE_SIZE = 256;
 
+// Face and MediaPipe models load straight from their publishers' hosting, so
+// this site serves only the app. Paths are pinned so a file never changes
+// under us. InsightFace buffalo_l comes from Immich's Hugging Face copy (the
+// same files as InsightFace's own release; weights are non-commercial).
+const IMMICH = 'https://huggingface.co/immich-app/buffalo_l/resolve/d09715916a0778919a770c343533641e250b8699';
+const MEDIAPIPE = 'https://storage.googleapis.com/mediapipe-models';
+// Must match the installed @mediapipe/tasks-vision version (pinned in package.json).
+const MEDIAPIPE_VERSION = '1.2.2';
+
 export const FACE_MODELS = {
-  detector: '/models/det_10g.onnx', // SCRFD-10G (InsightFace buffalo_l)
-  recognizer: '/models/w600k_r50.onnx', // ArcFace R50 (InsightFace buffalo_l)
-  pose: '/models/pose_landmarker_full.task', // MediaPipe
-  faceMesh: '/models/face_landmarker.task', // MediaPipe: expression and looking direction
-  objects: '/models/efficientdet_lite2.tflite', // MediaPipe: bottles, toys and other held things
-  magicTouch: '/models/magic_touch.tflite', // MediaPipe: outlines a held thing
-  mediapipeWasm: '/mediapipe',
+  detector: `${IMMICH}/detection/model.onnx`, // SCRFD-10G, 17 MB
+  recognizer: `${IMMICH}/recognition/model.onnx`, // ArcFace R50, 174 MB
+  pose: `${MEDIAPIPE}/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task`,
+  faceMesh: `${MEDIAPIPE}/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, // expression and looking direction
+  objects: `${MEDIAPIPE}/object_detector/efficientdet_lite2/float16/1/efficientdet_lite2.tflite`, // bottles, toys and other held things
+  magicTouch: `${MEDIAPIPE}/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite`, // outlines a held thing
+  mediapipeWasm: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`,
 };
 
 export interface Settings {

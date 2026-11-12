@@ -4,6 +4,7 @@ import * as ort from 'onnxruntime-web/webgpu';
 import { FACE_MODELS } from '../config';
 import type { Box } from '../db';
 import { nms, similarityTransform } from '../lib/geometry';
+import { modelBytes } from '../lib/modelCache';
 import { normalized } from '../lib/util';
 
 const DET_SIZE = 640;
@@ -24,8 +25,12 @@ let det: ort.InferenceSession | null = null;
 let rec: ort.InferenceSession | null = null;
 let provider = 'wasm';
 
+// Load onnxruntime's wasm engine (~28 MB) from jsDelivr, as Transformers.js
+// does for the cut-out worker, so it never counts against this site's hosting.
+ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ort.env.versions.web}/dist/`;
+
 async function createSession(url: string): Promise<ort.InferenceSession> {
-  const buf = await (await fetch(url)).arrayBuffer();
+  const buf = await modelBytes(url);
   if ('gpu' in navigator) {
     try {
       const s = await ort.InferenceSession.create(buf, { executionProviders: ['webgpu'] });

@@ -23,9 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Downloaded model weights (fetched by scripts/fetch-models.mjs)
-public/models/
-public/mediapipe/
 public/dev-photos/
 
 # Firebase deploy cache

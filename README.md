@@ -10,11 +10,10 @@ Requires Node 20+ and a Chromium browser (Chrome or Edge) on a desktop or laptop
 
 ```bash
 npm install
-npm run models   # downloads face, pose, face-mesh and object models (~220 MB) into public/models
 npm run dev
 ```
 
-Open http://localhost:5173. The first time you make stickers, the browser also downloads the cut-out models from the Hugging Face Hub (MODNet, 26 MB, and face parsing, 89 MB) and caches them.
+Open http://localhost:5173. No model files live in this repo or on the site: the browser downloads them on first use and keeps them in Cache Storage. Face models (InsightFace buffalo_l, 191 MB) come from Immich's Hugging Face copy, MediaPipe models (31 MB) from Google's model storage, the onnxruntime and MediaPipe engines from jsDelivr, and the cut-out models (MODNet, 26 MB, and face parsing, 89 MB) from the Hugging Face Hub. The sources are pinned in `src/config.ts`.
 
 ## Live site
 
@@ -25,7 +24,7 @@ npm run build
 firebase deploy --only hosting
 ```
 
-`firebase.json` sends the cross-origin isolation headers, caches models for 30 days, and leaves `dev-photos/` out of the upload. The free plan allows about 360 MB of downloads a day. A first visit downloads about 210 MB of models, after which the browser keeps them, so only one or two new visitors a day fit. Past the limit the site goes offline until the next day; it is never billed.
+`firebase.json` sends the cross-origin isolation headers and leaves `dev-photos/` out of the upload. Firebase serves only the app (a few MB); every model downloads from its publisher's hosting, so the free plan's 360 MB a day covers well over a hundred new visitors. Past the limit the site goes offline until the next day; it is never billed.
 
 ## How it works
 
@@ -60,7 +59,6 @@ src/
   components/           one view per tab
   styles/theme.css      the design system: every colour, font, corner, line and shadow
   index.css             app styles, built only from theme tokens
-scripts/fetch-models.mjs  downloads model weights into public/models
 scripts/check-theme.mjs   part of `npm run lint`: fails on colours written outside theme.css
 ```
 

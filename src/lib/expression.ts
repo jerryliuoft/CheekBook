@@ -4,6 +4,7 @@
 import { FaceLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { FACE_MODELS } from '../config';
 import type { Box, Expression, Face, Looking } from '../db';
+import { modelBytes } from './modelCache';
 import { visionFiles } from './mediapipe';
 
 export const EXPRESSIONS: Record<Expression, string> = {
@@ -78,10 +79,10 @@ function lookingOf(s: Scores, l: NormalizedLandmark[]): Looking {
 let landmarker: Promise<FaceLandmarker> | null = null;
 
 function get() {
-  landmarker ??= visionFiles().then((vision) =>
+  landmarker ??= Promise.all([visionFiles(), modelBytes(FACE_MODELS.faceMesh)]).then(([vision, model]) =>
     FaceLandmarker.createFromOptions(vision, {
       // CPU: the GPU delegate gives wrong results on some machines, and this is ~30 ms a face.
-      baseOptions: { modelAssetPath: FACE_MODELS.faceMesh, delegate: 'CPU' },
+      baseOptions: { modelAssetBuffer: model, delegate: 'CPU' },
       runningMode: 'IMAGE',
       numFaces: 1,
       minFaceDetectionConfidence: 0.2,
